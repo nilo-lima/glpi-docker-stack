@@ -1,0 +1,6 @@
+# Cada fase tem seu próprio .gitignore — este cobre a raiz
+.DS_Store
+Thumbs.db
+*.swp
+*~
+sources/

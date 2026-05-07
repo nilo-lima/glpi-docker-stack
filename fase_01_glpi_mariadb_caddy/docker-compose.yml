@@ -1,0 +1,429 @@
+# ==============================================================================
+#  GLPI 11 Production Stack — docker-compose.yml
+# ==============================================================================
+#  Arquitetura: 5 containers, 1 serviço por container (Single Responsibility)
+#
+#    [caddy]  ──TLS──>  [glpi-app]  ──>  [mariadb]
+#                            │
+#                            ├──>  [redis]    (cache + sessões)
+#                            │
+#                       [glpi-cron]  (worker dedicado de tarefas agendadas)
+#
+#                       [backup]     (dump diário do MariaDB com retenção)
+#
+#  Redes segregadas:
+#    - frontend_net : caddy <-> glpi-app
+#    - backend_net  : glpi-app, glpi-cron <-> mariadb, redis, backup
+#
+#  Princípios aplicados:
+#    - Versões fixas (jamais "latest")
+#    - Não-root onde possível
+#    - cap_drop ALL + cap_add mínimo
+#    - no-new-privileges
+#    - Healthchecks em todos os serviços
+#    - Volumes nomeados (gerenciados pelo Docker, evitam problemas de permissão)
+#    - Banco SEM porta exposta no host (acessível só pela rede interna)
+# ==============================================================================
+
+name: ${COMPOSE_PROJECT_NAME:-glpi-prod}
+
+# ------------------------------------------------------------------------------
+# Anchors YAML reutilizáveis (DRY)
+# ------------------------------------------------------------------------------
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-security-defaults: &security-defaults
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+
+# ==============================================================================
+# SERVIÇOS
+# ==============================================================================
+services:
+
+  # ---------------------------------------------------------------------------
+  # MariaDB — banco de dados
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: persistência de dados é responsabilidade única
+  # do banco. Isolamento permite escalar/substituir/backupear sem tocar na app.
+  # ---------------------------------------------------------------------------
+  mariadb:
+    image: mariadb:${MARIADB_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-prod}-mariadb
+    hostname: mariadb
+    <<: *security-defaults
+    logging: *default-logging
+
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_AUTO_UPGRADE: "1"
+      TZ: ${TZ}
+
+    volumes:
+      # Dados persistentes do banco
+      - mariadb_data:/var/lib/mysql
+      # Tuning customizado para GLPI
+      - ./services/mariadb/config/glpi.cnf:/etc/mysql/conf.d/glpi.cnf:ro
+      # Scripts de inicialização (executados apenas na primeira subida)
+      - ./services/mariadb/init:/docker-entrypoint-initdb.d:ro
+
+    networks:
+      - backend_net
+
+    # IMPORTANTE: nenhuma porta exposta no host. Acesso apenas via rede interna.
+
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+    deploy:
+      resources:
+        limits:
+          memory: ${MARIADB_MEMORY_LIMIT}
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE   # MariaDB precisa para gerenciar arquivos de dados
+
+  # ---------------------------------------------------------------------------
+  # Redis — cache e armazenamento de sessões
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: cache em memória é serviço autônomo. Permite
+  # zerar cache/reiniciar sem afetar GLPI ou MariaDB. Suporta escalar (cluster).
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:${REDIS_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-prod}-redis
+    hostname: redis
+    <<: *security-defaults
+    logging: *default-logging
+
+    command:
+      - redis-server
+      - /usr/local/etc/redis/redis.conf
+      - --requirepass
+      - ${REDIS_PASSWORD}
+
+    volumes:
+      - redis_data:/data
+      - ./services/redis/config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+
+    networks:
+      - backend_net
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "--no-auth-warning", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_MEMORY_LIMIT}
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+
+  # ---------------------------------------------------------------------------
+  # GLPI — aplicação web (PHP-FPM + Apache)
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: regra de ouro do projeto — 1 container = 1
+  # serviço. A aplicação web é stateless (estado vai para mariadb + redis +
+  # volume de files), o que permite escalar horizontalmente no futuro.
+  # ---------------------------------------------------------------------------
+  glpi-app:
+    image: glpi/glpi:${GLPI_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-prod}-app
+    hostname: glpi-app
+    <<: *security-defaults
+    logging: *default-logging
+
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    environment:
+      # --- Conexão com banco ---
+      GLPI_DB_HOST: mariadb
+      GLPI_DB_PORT: 3306
+      GLPI_DB_NAME: ${MARIADB_DATABASE}
+      GLPI_DB_USER: ${MARIADB_USER}
+      GLPI_DB_PASSWORD: ${MARIADB_PASSWORD}
+
+      # --- Comportamento de instalação ---
+      GLPI_SKIP_AUTOINSTALL: ${GLPI_SKIP_AUTOINSTALL}
+      GLPI_SKIP_AUTOUPDATE: ${GLPI_SKIP_AUTOUPDATE}
+
+      # --- Cron desativado AQUI (rodará no container dedicado glpi-cron) ---
+      GLPI_CRONTAB_ENABLED: "false"
+
+      # --- Sessões PHP no Redis (configuração via php.ini custom) ---
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TZ: ${TZ}
+
+    volumes:
+      # Volume único conforme padrão da imagem oficial (config + files + plugins + marketplace)
+      - glpi_data:/var/glpi
+      # PHP customizado (sessões no Redis, opcache, limites)
+      - ./services/glpi/config/zz-glpi-custom.ini:/usr/local/etc/php/conf.d/zz-glpi-custom.ini:ro
+      # Arquivo estático servido diretamente pelo Apache (bypassa PHP/GLPI e o SessionCheckCookieListener)
+      - ./services/glpi/healthcheck/health:/var/www/glpi/public/health:ro
+      # Ensina Apache a propagar HTTPS=on a partir do header X-Forwarded-Proto do Caddy
+      - ./services/glpi/config/zzz-reverse-proxy.conf:/etc/apache2/conf-enabled/zzz-reverse-proxy.conf:ro
+
+    networks:
+      - frontend_net   # acessível pelo Caddy
+      - backend_net    # acessa mariadb e redis
+
+    # Sem ports expostas — só Caddy fala com este container
+
+    healthcheck:
+      # /health é um arquivo estático — Apache serve direto sem passar por PHP
+      # Evita o SessionCheckCookieListener do GLPI 11 que rejeita HTTP com session.cookie_secure=1
+      test: ["CMD", "curl", "--fail", "--silent", "--max-time", "5", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s   # GLPI demora pra subir na primeira vez (instala/migra DB)
+
+    deploy:
+      resources:
+        limits:
+          memory: ${GLPI_MEMORY_LIMIT}
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE   # Apache precisa para bind na porta 80 interna
+
+  # ---------------------------------------------------------------------------
+  # GLPI Cron — worker de tarefas agendadas
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: separar worker do front-end web é essencial
+  # para escalabilidade horizontal. Permite no futuro ter N containers web
+  # atrás de um load balancer com apenas 1 cron rodando, evitando duplicação
+  # de execução de jobs agendados (alertas, automações, sincronizações).
+  # ---------------------------------------------------------------------------
+  glpi-cron:
+    image: glpi/glpi:${GLPI_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-prod}-cron
+    hostname: glpi-cron
+    <<: *security-defaults
+    logging: *default-logging
+
+    depends_on:
+      glpi-app:
+        condition: service_healthy
+
+    environment:
+      GLPI_DB_HOST: mariadb
+      GLPI_DB_PORT: 3306
+      GLPI_DB_NAME: ${MARIADB_DATABASE}
+      GLPI_DB_USER: ${MARIADB_USER}
+      GLPI_DB_PASSWORD: ${MARIADB_PASSWORD}
+
+      # Auto-install/update DESATIVADO aqui — quem cuida disso é o glpi-app
+      GLPI_SKIP_AUTOINSTALL: "true"
+      GLPI_SKIP_AUTOUPDATE: "true"
+
+      # ESTE container é o único com cron ativado
+      GLPI_CRONTAB_ENABLED: "true"
+
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TZ: ${TZ}
+
+    volumes:
+      # Compartilha o mesmo volume de dados do app (plugins, files, config)
+      - glpi_data:/var/glpi
+      - ./services/glpi/config/zz-glpi-custom.ini:/usr/local/etc/php/conf.d/zz-glpi-custom.ini:ro
+      - ./services/glpi/config/zzz-reverse-proxy.conf:/etc/apache2/conf-enabled/zzz-reverse-proxy.conf:ro
+
+    networks:
+      - backend_net    # só precisa falar com mariadb e redis
+
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "cron"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+
+  # ---------------------------------------------------------------------------
+  # Caddy — reverse proxy + TLS automático (Let's Encrypt)
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: TLS termination e reverse proxy são respons-
+  # abilidades de borda, separadas da aplicação. Caddy gerencia certificados
+  # automaticamente, suporta HTTP/3, e desacopla o ciclo de vida do certificado
+  # do ciclo de vida da aplicação.
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:${CADDY_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-prod}-caddy
+    hostname: caddy
+    <<: *security-defaults
+    logging: *default-logging
+
+    depends_on:
+      glpi-app:
+        condition: service_healthy
+
+    environment:
+      GLPI_DOMAIN: ${GLPI_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+
+    volumes:
+      - ./services/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # certificados TLS persistentes
+      - caddy_config:/config
+
+    networks:
+      - frontend_net
+
+    ports:
+      # Únicas portas expostas no host de toda a stack
+      - "80:80"     # ACME HTTP-01 challenge + redirect 301 -> HTTPS
+      - "443:443"   # HTTPS
+      - "443:443/udp"  # HTTP/3 (QUIC)
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "--tries=1", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE   # bind nas portas 80/443
+
+  # ---------------------------------------------------------------------------
+  # Backup — dump agendado do MariaDB com retenção
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: backup é responsabilidade isolada. Tem seu
+  # próprio ciclo de vida, agendamento e retenção. Pode ser substituído por
+  # solução cloud (AWS Backup, Restic + S3) sem alterar o resto da stack.
+  # ---------------------------------------------------------------------------
+  backup:
+    build:
+      context: ./services/backup
+      dockerfile: Dockerfile
+    image: ${COMPOSE_PROJECT_NAME:-glpi-prod}/backup:1.0
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-prod}-backup
+    hostname: backup
+    <<: *security-defaults
+    logging: *default-logging
+
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+    environment:
+      MARIADB_HOST: mariadb
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      BACKUP_CRON_SCHEDULE: ${BACKUP_CRON_SCHEDULE}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS}
+      TZ: ${TZ}
+
+    volumes:
+      - ./backups:/backups
+      # Acesso somente leitura ao volume de files do GLPI para backup completo
+      - glpi_data:/glpi-data:ro
+
+    networks:
+      - backend_net
+
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "entrypoint.sh"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+
+# ==============================================================================
+# REDES
+# ==============================================================================
+# Segregação por função: serviços de borda (frontend) não compartilham rede
+# com serviços de dados (backend). Defesa em profundidade — se Caddy for
+# comprometido, atacante NÃO consegue alcançar diretamente o MariaDB/Redis.
+# ==============================================================================
+networks:
+  frontend_net:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-prod}_frontend
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: glpi-front
+  backend_net:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-prod}_backend
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: glpi-back
+    internal: false   # mantemos false para permitir resolver DNS externo (updates de plugins)
+
+# ==============================================================================
+# VOLUMES NOMEADOS
+# ==============================================================================
+# Volumes nomeados são gerenciados pelo Docker (sem problemas de permissão
+# UID/GID que ocorrem com bind mounts).
+# ==============================================================================
+volumes:
+  mariadb_data:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-prod}_mariadb_data
+  redis_data:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-prod}_redis_data
+  glpi_data:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-prod}_glpi_data
+  caddy_data:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-prod}_caddy_data
+  caddy_config:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-prod}_caddy_config
