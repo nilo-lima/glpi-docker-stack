@@ -1,4 +1,4 @@
-# 🏗️ Arquitetura — GLPI 11 + Observabilidade (Fase 2)
+# 🏗️ Arquitetura - GLPI 11 + Observabilidade (Fase 2)
 
 ## Visão Geral
 
@@ -133,7 +133,7 @@ backup container (cron via BACKUP_CRON_SCHEDULE)
 | **Rede** | 3 redes bridge segregadas; banco, cache e monitoring sem porta no host |
 | **Container** | `no-new-privileges:true`, `cap_drop: ALL`, `cap_add` mínimo documentado |
 | **Credenciais exporters** | Usuário `monitoring` com `PROCESS, SELECT, REPLICATION CLIENT, SLAVE MONITOR` apenas |
-| **Senha do exporter** | Armazenada em `.my.cnf` (chmod 644) em vez de `DATA_SOURCE_NAME` — evita parsing de `@`/`#` |
+| **Senha do exporter** | Armazenada em `.my.cnf` (chmod 644) em vez de `DATA_SOURCE_NAME` - evita parsing de `@`/`#` |
 | **Secrets** | `.env` com `chmod 600`, `.gitignore` blindado, `.my.cnf` gitignored |
 | **Logs** | Rotação configurada (10 MB × 5 arquivos); logs em stdout/stderr |
 | **Recursos** | `mem_limit` explícito em todos os containers |
@@ -142,13 +142,13 @@ backup container (cron via BACKUP_CRON_SCHEDULE)
 
 ## Decisões Arquiteturais
 
-### ADR-001 — Stack unificada (não externa)
+### ADR-001 - Stack unificada (não externa)
 
 A Fase 2 foi projetada como stack **independente e auto-suficiente**, incluindo todos os serviços da Fase 1. Isso elimina dependência de redes externas (`external: true`), simplifica o bootstrap (um único `docker compose up -d`) e garante que as redes tenham os nomes corretos sem depender do estado da Fase 1.
 
 Custo: duplicação dos serviços GLPI se ambas as fases forem executadas simultaneamente. Mitigação: usar `COMPOSE_PROJECT_NAME` diferente por fase.
 
-### ADR-002 — Credenciais do mysqld-exporter via `.my.cnf`
+### ADR-002 - Credenciais do mysqld-exporter via `.my.cnf`
 
 O `prom/mysqld-exporter` suporta dois métodos de credenciais:
 1. `DATA_SOURCE_NAME` como variável de ambiente (DSN URL)
@@ -156,19 +156,19 @@ O `prom/mysqld-exporter` suporta dois métodos de credenciais:
 
 Senhas com `@` ou `#` quebram o parsing de DSN URL (o `@` é o separador de credenciais em URLs). O método `.my.cnf` não tem essa restrição e é mais adequado para senhas geradas com `openssl rand`. O arquivo é gitignored e gerado pelo script `setup-monitoring-user.sh`.
 
-### ADR-003 — Healthcheck do promtail via `bash /dev/tcp`
+### ADR-003 - Healthcheck do promtail via `bash /dev/tcp`
 
-`grafana/promtail:3.3.2` é baseado em Debian slim sem `wget` ou `curl`. O healthcheck padrão `wget -qO- http://localhost:9080/ready` falha com exit 127. A alternativa é usar `bash -c "echo > /dev/tcp/localhost/9080"` — bash está disponível na imagem e `/dev/tcp` funciona como pseudo-arquivo de socket TCP.
+`grafana/promtail:3.3.2` é baseado em Debian slim sem `wget` ou `curl`. O healthcheck padrão `wget -qO- http://localhost:9080/ready` falha com exit 127. A alternativa é usar `bash -c "echo > /dev/tcp/localhost/9080"` - bash está disponível na imagem e `/dev/tcp` funciona como pseudo-arquivo de socket TCP.
 
-### ADR-004 — Healthcheck desabilitado no redis-exporter
+### ADR-004 - Healthcheck desabilitado no redis-exporter
 
 `oliver006/redis_exporter:v1.66.0` usa imagem scratch (apenas o binário Go estático). Não há shell, wget, curl ou qualquer utilitário disponível. A saúde do exporter é monitorada indiretamente pelo Prometheus: se o scrape de `:9121/metrics` falhar, o alerta `TargetDown` dispara.
 
-### ADR-005 — Filtragem Promtail por projeto Docker Compose
+### ADR-005 - Filtragem Promtail por projeto Docker Compose
 
 Promtail 3.x Docker SD não expõe `__meta_docker_container_state` (ao contrário do que a documentação de versões anteriores sugeria). Usar `action: keep` nessa label causa descarte silencioso de todos os targets. O filtro correto é por `__meta_docker_container_label_com_docker_compose_project`, que garante que apenas containers deste projeto sejam coletados.
 
-### ADR-006 — Label `job` no Promtail para compatibilidade Grafana
+### ADR-006 - Label `job` no Promtail para compatibilidade Grafana
 
 Dashboards da comunidade Grafana (ex: Loki quickstart ID 13639) usam `{job="$app"}` como seletor padrão. Adicionamos `job` como label no Promtail mapeado do nome do serviço Docker Compose, permitindo que dashboards da comunidade funcionem sem modificação (além da substituição do datasource template `${DS_LOKI}` → `loki`).
 
@@ -194,4 +194,4 @@ loki ─────────────────────────
 promtail ─────────────────┘ (envia para loki)
 ```
 
-Todos os `depends_on` usam `condition: service_healthy` — cada serviço só sobe após seu(s) dependente(s) estarem healthy.
+Todos os `depends_on` usam `condition: service_healthy` - cada serviço só sobe após seu(s) dependente(s) estarem healthy.

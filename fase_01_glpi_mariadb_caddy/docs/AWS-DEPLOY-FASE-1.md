@@ -1,4 +1,4 @@
-# Deploy na AWS — EC2 com TLS Real
+# Deploy na AWS - EC2 com TLS Real
 
 Passos para implantar a Fase 1 em uma instância EC2, com domínio real e certificado Let's Encrypt.
 
@@ -11,7 +11,7 @@ Passos para implantar a Fase 1 em uma instância EC2, com domínio real e certif
 - Conta AWS com permissão de criar EC2 + Security Groups
 - Domínio registrado com acesso ao painel DNS (ex: `seu-dominio.com.br`)
 - AWS CLI instalado e configurado localmente (`aws configure`)
-- GitHub CLI instalado (`gh`) — ou o repositório já publicado
+- GitHub CLI instalado (`gh`) - ou o repositório já publicado
 
 ---
 
@@ -21,8 +21,8 @@ Passos para implantar a Fase 1 em uma instância EC2, com domínio real e certif
 
 | Campo | Valor |
 |---|---|
-| AMI | **Debian 12 (Bookworm)** — buscar "Debian 12" no marketplace |
-| Instance type | **t3.medium** (2 vCPU, 4 GB RAM) — mínimo para GLPI em produção |
+| AMI | **Debian 12 (Bookworm)** - buscar "Debian 12" no marketplace |
+| Instance type | **t3.medium** (2 vCPU, 4 GB RAM) - mínimo para GLPI em produção |
 | Key pair | Criar ou selecionar um par de chaves existente (`.pem`) |
 | Storage | **20 GB** gp3 (raiz) |
 | Region | `us-east-1` (ou a mais próxima do usuário final) |
@@ -48,12 +48,12 @@ Abrir as portas abaixo na instância (Console: EC2 → Security Groups → Inbou
 
 | Porta | Protocolo | Origem | Motivo |
 |---|---|---|---|
-| 22 | TCP | Seu IP (`x.x.x.x/32`) | SSH — **nunca 0.0.0.0/0** |
+| 22 | TCP | Seu IP (`x.x.x.x/32`) | SSH - **nunca 0.0.0.0/0** |
 | 80 | TCP | 0.0.0.0/0, ::/0 | HTTP (Caddy redireciona para HTTPS) |
 | 443 | TCP | 0.0.0.0/0, ::/0 | HTTPS |
 | 443 | UDP | 0.0.0.0/0, ::/0 | QUIC / HTTP/3 (opcional) |
 
-> **Banco e Redis** não precisam de regra — ficam em rede interna Docker, sem porta exposta no host.
+> **Banco e Redis** não precisam de regra - ficam em rede interna Docker, sem porta exposta no host.
 
 ---
 
@@ -135,7 +135,7 @@ GLPI_DOMAIN=glpi.seu-dominio.com.br
 # E-mail para notificações de expiração do certificado
 ACME_EMAIL=seu-email@exemplo.com
 
-# Senhas — trocar todos os valores TROCAR_*
+# Senhas - trocar todos os valores TROCAR_*
 MARIADB_ROOT_PASSWORD="senha-root-forte-aqui"
 MARIADB_PASSWORD="senha-glpi-forte-aqui"
 REDIS_PASSWORD="senha-redis-forte-aqui"
@@ -195,7 +195,7 @@ Credenciais padrão:
 
 ```bash
 # Marcar instalação como concluída (evita re-execução do wizard)
-# Já feito pelo bootstrap.sh — confirmar:
+# Já feito pelo bootstrap.sh - confirmar:
 docker compose exec glpi-app printenv GLPI_SKIP_AUTOINSTALL
 # Deve retornar: true
 
@@ -211,7 +211,7 @@ docker compose exec glpi-app \
 
 ## 10. Configurar renovação automática do certificado
 
-O Caddy renova o certificado automaticamente — nenhuma ação necessária. Para verificar:
+O Caddy renova o certificado automaticamente - nenhuma ação necessária. Para verificar:
 
 ```bash
 docker compose logs caddy | grep -i "certificate\|tls\|acme"
@@ -238,10 +238,10 @@ scp -i ~/.ssh/minha-chave.pem \
 No Console AWS (ou CLI):
 
 ```bash
-# Parar a instância (mantém o EBS — cobra ~USD 0,08/GB-mês)
+# Parar a instância (mantém o EBS - cobra ~USD 0,08/GB-mês)
 aws ec2 stop-instances --instance-ids <INSTANCE_ID>
 
-# Terminar a instância (destrói tudo — sem custo residual)
+# Terminar a instância (destrói tudo - sem custo residual)
 aws ec2 terminate-instances --instance-ids <INSTANCE_ID>
 ```
 
@@ -258,7 +258,7 @@ aws ec2 terminate-instances --instance-ids <INSTANCE_ID>
 | `GLPI_DOMAIN` | `glpi.local` ou `localhost` | `glpi.seu-dominio.com.br` |
 | Porta 80/443 | Localhost apenas | Acessível pela internet |
 | Custo | Zero | ~USD 0,042/h (t3.medium) |
-| IP fixo | Sim | Muda a cada start — usar Elastic IP se precisar de IP fixo |
+| IP fixo | Sim | Muda a cada start - usar Elastic IP se precisar de IP fixo |
 
 ### Elastic IP (opcional)
 

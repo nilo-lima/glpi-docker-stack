@@ -65,6 +65,7 @@ docker-compose.local.yml
 CLAUDE.local.md
 CLAUDE.md
 .claude/
+.mcp.json
 
 # --- Outros arquivos sensíveis ou específicos do ambiente ---
 docs/GIT-UPLOAD.md

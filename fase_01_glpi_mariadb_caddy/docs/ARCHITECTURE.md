@@ -1,4 +1,4 @@
-# 🏗️ Arquitetura — GLPI 11 Production Stack
+# 🏗️ Arquitetura - GLPI 11 Production Stack
 
 ## Visão geral
 
@@ -6,11 +6,11 @@ Stack composto por **6 containers de runtime** (glpi-app, glpi-cron, mariadb, re
 
 ## Princípios
 
-1. **Imutabilidade** — todas as imagens com tag fixa; nunca `:latest`
-2. **Single Responsibility** — cada container faz uma coisa
-3. **Defesa em profundidade** — múltiplas camadas de proteção
-4. **Stateless onde possível** — apenas DB, Redis e volume de files são stateful
-5. **Composabilidade** — qualquer serviço pode ser substituído sem afetar os outros
+1. **Imutabilidade** - todas as imagens com tag fixa; nunca `:latest`
+2. **Single Responsibility** - cada container faz uma coisa
+3. **Defesa em profundidade** - múltiplas camadas de proteção
+4. **Stateless onde possível** - apenas DB, Redis e volume de files são stateful
+5. **Composabilidade** - qualquer serviço pode ser substituído sem afetar os outros
 
 ## Fluxo de requisição (caminho feliz)
 
@@ -71,7 +71,7 @@ Operador seleciona backup de banco (por índice)
 - **Função:** comunicação entre app, banco, cache e backup
 - **Externamente acessível:** **NÃO**. Nenhuma porta do backend é mapeada para o host.
 
-> 💡 Defesa em profundidade: comprometimento do `caddy` não dá ao atacante acesso direto ao banco — ele precisaria também comprometer o `glpi-app` para chegar ao MariaDB.
+> 💡 Defesa em profundidade: comprometimento do `caddy` não dá ao atacante acesso direto ao banco - ele precisaria também comprometer o `glpi-app` para chegar ao MariaDB.
 
 ## Volumes
 
@@ -95,7 +95,7 @@ Operador seleciona backup de banco (por índice)
 | **Cache** | Senha obrigatória, comandos perigosos renomeados (`FLUSHALL` etc.) |
 | **Sessões** | `cookie_secure=1`, `cookie_httponly=1`, `cookie_samesite=Lax`, locking |
 | **Secrets** | `.env` com `chmod 600`, gitignore blindado |
-| **Logs** | Rotação configurada (10MB × 5 arquivos) — evita disco cheio |
+| **Logs** | Rotação configurada (10MB × 5 arquivos) - evita disco cheio |
 | **Backup** | Dump consistente + integridade verificada + retenção rotacional |
 
 ## Trade-offs aceitos (e por quê)
@@ -110,10 +110,10 @@ Operador seleciona backup de banco (por índice)
 ## Pontos de extensão para Fase 2 (Observabilidade)
 
 A arquitetura atual já está preparada para receber:
-- **Prometheus** — exporters podem ser adicionados sem alterar serviços existentes
-- **Grafana** — dashboards consumindo Prometheus
-- **Loki + Promtail** — logs JSON já são compatíveis
-- **Alertmanager** — integração via Prometheus
+- **Prometheus** - exporters podem ser adicionados sem alterar serviços existentes
+- **Grafana** - dashboards consumindo Prometheus
+- **Loki + Promtail** - logs JSON já são compatíveis
+- **Alertmanager** - integração via Prometheus
 
 ## Pontos de extensão para Fase 3 (AWS + Terraform)
 

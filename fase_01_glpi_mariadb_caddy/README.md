@@ -1,8 +1,8 @@
 <div align="center">
 
-# 🖥️ GLPI 11 — Production Stack
+# 🖥️ GLPI 11 - Production Stack
 
-**Stack production-grade do GLPI 11 dockerizada em Debian 12 — TLS automático, Redis, worker dedicado de cron e backup agendado com restore testado.**
+**Stack production-grade do GLPI 11 dockerizada em Debian 12 - TLS automático, Redis, worker dedicado de cron e backup agendado com restore testado.**
 
 ![GLPI](https://img.shields.io/badge/GLPI-11.0.7-00A4E4?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PC9zdmc+&logoColor=white)
 ![MariaDB](https://img.shields.io/badge/MariaDB-11.4-003545?style=flat-square&logo=mariadb&logoColor=white)
@@ -23,7 +23,7 @@ Implantação **production-ready** do GLPI 11 (Gestionnaire Libre de Parc Inform
 
 | Princípio | Implementação |
 |:---|:---|
-| **Imutabilidade** | Versões pinadas em todas as imagens — nunca `:latest` |
+| **Imutabilidade** | Versões pinadas em todas as imagens - nunca `:latest` |
 | **Single Responsibility** | 1 serviço = 1 container (app, cron, db, cache, proxy, backup) |
 | **Defesa em profundidade** | Redes segregadas, `cap_drop: ALL`, secrets via `.env` |
 | **Resiliência** | Healthchecks com `start_period` adequado, `restart: unless-stopped` |
@@ -68,31 +68,31 @@ flowchart TB
 | Serviço | Imagem | Função | Portas (host) |
 |:---|:---|:---|:---|
 | `caddy` | `caddy:2.8-alpine` | Reverse proxy + TLS automático (Let's Encrypt) | `80`, `443`, `443/udp` |
-| `glpi-app` | `glpi/glpi:11.0.7` | Aplicação web GLPI | — (interno) |
-| `glpi-cron` | `glpi/glpi:11.0.7` | Worker dedicado de tarefas agendadas | — (interno) |
-| `mariadb` | `mariadb:11.4` | Banco de dados | — (interno) |
-| `redis` | `redis:7.4-alpine` | Cache e sessões PHP | — (interno) |
-| `backup` | `${projeto}/backup:1.0` | Dump diário do banco + arquivos | — (interno) |
+| `glpi-app` | `glpi/glpi:11.0.7` | Aplicação web GLPI | - (interno) |
+| `glpi-cron` | `glpi/glpi:11.0.7` | Worker dedicado de tarefas agendadas | - (interno) |
+| `mariadb` | `mariadb:11.4` | Banco de dados | - (interno) |
+| `redis` | `redis:7.4-alpine` | Cache e sessões PHP | - (interno) |
+| `backup` | `${projeto}/backup:1.0` | Dump diário do banco + arquivos | - (interno) |
 
 ---
 
 ## 🧠 Justificativa das Decisões Técnicas
 
-### ADR-001 — Worker de cron em container dedicado (`glpi-cron`)
+### ADR-001 - Worker de cron em container dedicado (`glpi-cron`)
 
 O GLPI possui um sistema de tarefas agendadas (alertas, automações, sincronizações LDAP). Em vez de ativar o cron dentro do `glpi-app`, criamos um container dedicado com `GLPI_CRONTAB_ENABLED=true` enquanto o app mantém `false`. Isso permite futura escala horizontal do `glpi-app` (N réplicas atrás de load balancer) sem o risco de jobs duplicados sendo executados em cada réplica ao mesmo tempo.
 
-### ADR-002 — Endpoint `/health` estático como healthcheck do Apache
+### ADR-002 - Endpoint `/health` estático como healthcheck do Apache
 
-O GLPI 11 implementa `SessionCheckCookieListener`: qualquer requisição HTTP é rejeitada com `400 Bad Request` quando `session.cookie_secure=1` está ativo — uma proteção legítima contra cookies de sessão em canais não cifrados. O healthcheck do container não pode usar HTTPS direto (o TLS fica no Caddy). A solução: um arquivo estático em `/var/www/glpi/public/health` montado via volume. O Apache já tem `RewriteCond %{REQUEST_FILENAME} !-f` — arquivos existentes são servidos diretamente sem passar pelo PHP, evitando a validação do GLPI.
+O GLPI 11 implementa `SessionCheckCookieListener`: qualquer requisição HTTP é rejeitada com `400 Bad Request` quando `session.cookie_secure=1` está ativo - uma proteção legítima contra cookies de sessão em canais não cifrados. O healthcheck do container não pode usar HTTPS direto (o TLS fica no Caddy). A solução: um arquivo estático em `/var/www/glpi/public/health` montado via volume. O Apache já tem `RewriteCond %{REQUEST_FILENAME} !-f` - arquivos existentes são servidos diretamente sem passar pelo PHP, evitando a validação do GLPI.
 
-### ADR-003 — `SetEnvIf X-Forwarded-Proto "^https$" HTTPS=on`
+### ADR-003 - `SetEnvIf X-Forwarded-Proto "^https$" HTTPS=on`
 
-Caddy faz TLS termination e repassa HTTP interno para o `glpi-app`. O Symfony (base do GLPI 11) determina se a requisição é segura via `$request->isSecure()`, que verifica `$_SERVER['HTTPS']`. Sem configuração, Apache não traduz o header `X-Forwarded-Proto: https` para essa variável, e o GLPI rejeita todas as requisições do browser com o erro de cookie seguro. A diretiva `SetEnvIf` do `mod_setenvif` (já habilitado na imagem oficial) resolve isso sem modificar a imagem — apenas um arquivo de config montado via volume.
+Caddy faz TLS termination e repassa HTTP interno para o `glpi-app`. O Symfony (base do GLPI 11) determina se a requisição é segura via `$request->isSecure()`, que verifica `$_SERVER['HTTPS']`. Sem configuração, Apache não traduz o header `X-Forwarded-Proto: https` para essa variável, e o GLPI rejeita todas as requisições do browser com o erro de cookie seguro. A diretiva `SetEnvIf` do `mod_setenvif` (já habilitado na imagem oficial) resolve isso sem modificar a imagem - apenas um arquivo de config montado via volume.
 
-### ADR-004 — GID bridge no container de backup (Alpine ≠ Debian)
+### ADR-004 - GID bridge no container de backup (Alpine ≠ Debian)
 
-O container GLPI roda em Debian com `www-data` GID 33. O container de backup usa Alpine 3.20, onde `www-data` tem GID 82. Os arquivos OAuth do GLPI (`oauth.pem`, `oauth.pub`) têm permissão `660` — legíveis apenas pelo dono ou grupo 33. Sem intervenção, o `tar` falha silenciosamente nesses arquivos. A solução: criar no Dockerfile Alpine um grupo `glpi-www` com GID 33 explícito e adicionar o usuário `backup` a ele. A checagem de permissão do kernel usa o número do GID, não o nome — o bridge funciona de forma transparente.
+O container GLPI roda em Debian com `www-data` GID 33. O container de backup usa Alpine 3.20, onde `www-data` tem GID 82. Os arquivos OAuth do GLPI (`oauth.pem`, `oauth.pub`) têm permissão `660` - legíveis apenas pelo dono ou grupo 33. Sem intervenção, o `tar` falha silenciosamente nesses arquivos. A solução: criar no Dockerfile Alpine um grupo `glpi-www` com GID 33 explícito e adicionar o usuário `backup` a ele. A checagem de permissão do kernel usa o número do GID, não o nome - o bridge funciona de forma transparente.
 
 ---
 
@@ -100,7 +100,7 @@ O container GLPI roda em Debian com `www-data` GID 33. O container de backup usa
 
 ### Host
 
-- **SO:** Debian 12 (Bookworm) — outras distros funcionam, testado em Ubuntu 22.04+
+- **SO:** Debian 12 (Bookworm) - outras distros funcionam, testado em Ubuntu 22.04+
 - **CPU:** mínimo 2 vCPUs
 - **RAM:** mínimo 4 GB
 - **Disco:** 20 GB livres
@@ -123,7 +123,7 @@ Aponte um registro `A` do seu domínio para o IP público do host **antes** de s
 glpi.exemplo.com.br.   IN  A   203.0.113.42
 ```
 
-> **Teste local:** use `GLPI_DOMAIN=glpi.localhost` — o Caddy emite certificado interno automaticamente, sem DNS externo.
+> **Teste local:** use `GLPI_DOMAIN=glpi.localhost` - o Caddy emite certificado interno automaticamente, sem DNS externo.
 
 ---
 
@@ -138,7 +138,7 @@ cd glpi-docker-stack/fase_01_glpi_mariadb_caddy
 chmod +x scripts/*.sh services/backup/scripts/*.sh
 ./scripts/bootstrap.sh
 
-# 3. Aguarde a primeira inicialização (2–5 min — instala o banco)
+# 3. Aguarde a primeira inicialização (2–5 min - instala o banco)
 docker compose logs -f glpi-app
 
 # 4. Acesse https://seu-dominio.com.br
@@ -250,7 +250,7 @@ docker compose exec glpi-app /var/www/glpi/bin/console list
 ### Off-site (recomendado)
 
 ```bash
-# No crontab do HOST — sincronizar após o backup das 03:00
+# No crontab do HOST - sincronizar após o backup das 03:00
 0 4 * * * rclone sync /opt/glpi/backups/ s3:meu-bucket-glpi/ --transfers=4
 ```
 
@@ -270,7 +270,7 @@ ERR getting certificate ... DNS problem
 
 ### `glpi-app` unhealthy após bootstrap
 
-- Na **primeira** inicialização o GLPI instala o banco (~2–5 min) — o `start_period` é 120s, aguarde
+- Na **primeira** inicialização o GLPI instala o banco (~2–5 min) - o `start_period` é 120s, aguarde
 - `docker compose logs -f glpi-app`
 - Se persistir: `docker compose exec glpi-app ping mariadb` para testar conectividade
 
@@ -345,17 +345,17 @@ watch -n 5 'docker compose ps'
 
 ## 🎓 Lições Aprendidas
 
-Este projeto foi validado com um destroy + recreate completo. Durante o bootstrap inicial, 9 problemas reais foram identificados e corrigidos — documentados aqui por serem recorrentes em stacks similares.
+Este projeto foi validado com um destroy + recreate completo. Durante o bootstrap inicial, 9 problemas reais foram identificados e corrigidos - documentados aqui por serem recorrentes em stacks similares.
 
 **Aspas em variáveis de ambiente com caracteres especiais são obrigatórias.** `BACKUP_CRON_SCHEDULE=0 3 * * *` sem aspas faz o bash interpretar `3` como um comando ao fazer `source .env`. Senhas com `@`, `#` ou `$` têm o mesmo problema. A regra: qualquer valor com espaço ou caractere especial no `.env` precisa de aspas duplas.
 
 **Variáveis de ambiente precisam ser declaradas explicitamente no `environment:` do compose.** O PHP expande `${REDIS_PASSWORD}` no `php.ini`, mas a variável só existe no container se for declarada. Sem `REDIS_PASSWORD: ${REDIS_PASSWORD}` no compose, o PHP recebia string vazia, e o Redis recusava a conexão.
 
-**GLPI 11 rejeita HTTP por design quando `session.cookie_secure=1`.** O `SessionCheckCookieListener` do Symfony retorna `400 Bad Request` para qualquer requisição sem HTTPS — mesmo healthchecks internos. Solução: arquivo estático no doc root do Apache, servido diretamente sem passar por PHP.
+**GLPI 11 rejeita HTTP por design quando `session.cookie_secure=1`.** O `SessionCheckCookieListener` do Symfony retorna `400 Bad Request` para qualquer requisição sem HTTPS - mesmo healthchecks internos. Solução: arquivo estático no doc root do Apache, servido diretamente sem passar por PHP.
 
 **Caddy faz TLS termination; o Apache interno não sabe que a requisição veio por HTTPS.** `$request->isSecure()` retorna false sem `SetEnvIf X-Forwarded-Proto "^https$" HTTPS=on` no Apache. Uma linha de config montada via volume resolve sem modificar a imagem oficial.
 
-**Alpine Linux e Debian têm GIDs diferentes para `www-data` (82 vs 33).** O container de backup (Alpine) tentava ler arquivos com permissão `660` pertencentes ao GID 33 do GLPI (Debian). A solução foi criar um grupo com GID 33 no Dockerfile Alpine — o kernel verifica o número do GID, não o nome.
+**Alpine Linux e Debian têm GIDs diferentes para `www-data` (82 vs 33).** O container de backup (Alpine) tentava ler arquivos com permissão `660` pertencentes ao GID 33 do GLPI (Debian). A solução foi criar um grupo com GID 33 no Dockerfile Alpine - o kernel verifica o número do GID, não o nome.
 
 **DSNs de URL não aceitam `@` e `#` literais.** `redis://:Senha@#@host/db` quebra o parser de URL porque `@` é separador de credenciais e `#` é fragmento. A senha precisa de URL-encoding (`urllib.parse.quote`) antes de ser inserida em qualquer DSN.
 
@@ -363,16 +363,16 @@ Este projeto foi validado com um destroy + recreate completo. Durante o bootstra
 
 ## 🗺️ Roadmap
 
-### Fase 1 — Production Stack ✅
+### Fase 1 - Production Stack ✅
 Stack base com 6 containers, TLS automático, backup agendado com restore testado.
 
-### Fase 2 — Observabilidade
+### Fase 2 - Observabilidade
 Prometheus + Grafana (dashboards GLPI/MariaDB/Redis) + Loki + Promtail + Alertmanager.
 
-### Fase 3 — AWS com Terraform
+### Fase 3 - AWS com Terraform
 VPC, EC2, Security Groups, S3 para backups off-site, ACM para TLS gerenciado.
 
-### Fase 4 — Melhorias
+### Fase 4 - Melhorias
 CrowdSec (WAF/anti-bruteforce), CI/CD com GitHub Actions, Helm chart para Kubernetes.
 
 ---
@@ -382,7 +382,7 @@ CrowdSec (WAF/anti-bruteforce), CI/CD com GitHub Actions, Helm chart para Kubern
 Se este projeto foi útil para você:
 - ⭐ Deixe uma estrela no repositório
 - 🐛 Abra uma issue com sugestões ou bugs
-- 🤝 Contribua com um pull request — veja [CONTRIBUTING.md](CONTRIBUTING.md) para as convenções do projeto
+- 🤝 Contribua com um pull request - veja [CONTRIBUTING.md](CONTRIBUTING.md) para as convenções do projeto
 
 ---
 
@@ -390,7 +390,7 @@ Se este projeto foi útil para você:
 
 Distribuído sob a licença **MIT**. Veja [LICENSE](LICENSE) para mais informações.
 
-GLPI é distribuído sob **GPL-3.0** — ver [glpi-project.org](https://www.glpi-project.org).
+GLPI é distribuído sob **GPL-3.0** - ver [glpi-project.org](https://www.glpi-project.org).
 
 ---
 

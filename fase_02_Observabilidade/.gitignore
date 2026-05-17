@@ -67,6 +67,9 @@ docker-compose.local.yml
 .claude/settings.local.json
 .claude/settings.json
 CLAUDE.local.md
+CLAUDE.md
+.claude/
+.mcp.json
 
 # --- Docs com informação específica do ambiente (domínio real, e-mail) ---
 # A versão genérica (AWS-DEPLOY.md) é versionada; a específica não.

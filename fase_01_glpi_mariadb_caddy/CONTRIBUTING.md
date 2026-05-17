@@ -52,7 +52,7 @@ Estas regras se aplicam a todas as contribuições:
 - **Um serviço por container.** Não agrupe múltiplos processos.
 - **Sem secrets hardcoded.** Todas as credenciais ficam no `.env`; referencie-as como `${VAR}` no `docker-compose.yml`.
 - **Todo serviço novo precisa de healthcheck**, política de `restart`, rotação de logs e `cap_drop: ALL`.
-- **Preserve os comentários existentes** no `docker-compose.yml` — eles documentam decisões arquiteturais, não apenas configuração.
+- **Preserve os comentários existentes** no `docker-compose.yml` - eles documentam decisões arquiteturais, não apenas configuração.
 - **Scripts shell** devem começar com `set -euo pipefail` e ser compatíveis com Bash 4+.
 
 Consulte [`.claude/rules/devops-standards.md`](.claude/rules/devops-standards.md) para o conjunto completo de padrões.

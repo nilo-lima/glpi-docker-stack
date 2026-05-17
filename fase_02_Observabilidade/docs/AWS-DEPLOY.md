@@ -1,4 +1,4 @@
-# Deploy na AWS — EC2 com TLS Real (Fase 2)
+# Deploy na AWS - EC2 com TLS Real (Fase 2)
 
 Passos para implantar a stack completa (GLPI + Observabilidade) em uma instância EC2, com dois subdomínios reais e certificados Let's Encrypt automáticos.
 
@@ -22,10 +22,10 @@ Passos para implantar a stack completa (GLPI + Observabilidade) em uma instânci
 
 | Campo | Valor |
 |---|---|
-| AMI | **Debian 12 (Bookworm)** — buscar "Debian 12" no marketplace |
-| Instance type | **t3.large** (2 vCPU, 8 GB RAM) — necessário para 14 containers |
+| AMI | **Debian 12 (Bookworm)** - buscar "Debian 12" no marketplace |
+| Instance type | **t3.large** (2 vCPU, 8 GB RAM) - necessário para 14 containers |
 | Key pair | Criar ou selecionar um par de chaves existente (`.pem`) |
-| Storage | **30 GB** gp3 — Prometheus TSDB + Loki chunks crescem com o tempo |
+| Storage | **30 GB** gp3 - Prometheus TSDB + Loki chunks crescem com o tempo |
 | Region | `us-east-1` (ou a mais próxima do usuário final) |
 
 ### Via AWS CLI
@@ -50,12 +50,12 @@ aws ec2 run-instances \
 
 | Porta | Protocolo | Origem | Motivo |
 |---|---|---|---|
-| 22 | TCP | Seu IP (`x.x.x.x/32`) | SSH — **nunca 0.0.0.0/0** |
+| 22 | TCP | Seu IP (`x.x.x.x/32`) | SSH - **nunca 0.0.0.0/0** |
 | 80 | TCP | 0.0.0.0/0, ::/0 | HTTP (Caddy redireciona para HTTPS) |
-| 443 | TCP | 0.0.0.0/0, ::/0 | HTTPS — GLPI e Grafana passam pelo Caddy |
+| 443 | TCP | 0.0.0.0/0, ::/0 | HTTPS - GLPI e Grafana passam pelo Caddy |
 | 443 | UDP | 0.0.0.0/0, ::/0 | QUIC / HTTP/3 (opcional) |
 
-> **Grafana não precisa de porta extra** — trafega por `https://grafana.seu-dominio.com.br` via Caddy na porta 443. Banco, Redis e demais serviços de monitoramento ficam sem porta exposta no host.
+> **Grafana não precisa de porta extra** - trafega por `https://grafana.seu-dominio.com.br` via Caddy na porta 443. Banco, Redis e demais serviços de monitoramento ficam sem porta exposta no host.
 
 ---
 
@@ -137,7 +137,7 @@ GLPI_DOMAIN=glpi.seu-dominio.com.br
 GRAFANA_DOMAIN=grafana.glpi.seu-dominio.com.br
 ACME_EMAIL=seu-email@exemplo.com
 
-# Senhas — substituir todos os valores TROCAR_*
+# Senhas - substituir todos os valores TROCAR_*
 MARIADB_ROOT_PASSWORD="senha-root-forte-aqui"
 MARIADB_PASSWORD="senha-glpi-forte-aqui"
 REDIS_PASSWORD="senha-redis-forte-aqui"
@@ -256,14 +256,14 @@ docker compose up -d glpi-app glpi-cron
 
 | Serviço | URL | Credenciais padrão |
 |---|---|---|
-| GLPI | `https://glpi.seu-dominio.com.br` | `glpi` / `glpi` — **trocar imediatamente** |
+| GLPI | `https://glpi.seu-dominio.com.br` | `glpi` / `glpi` - **trocar imediatamente** |
 | Grafana | `https://grafana.glpi.seu-dominio.com.br` | `admin` / `GRAFANA_ADMIN_PASSWORD` |
 
 No Grafana, pasta **GLPI Production** contém 4 dashboards provisionados automaticamente:
-- **Node Exporter Full** — CPU, RAM, disco, rede do host
-- **MySQL Overview** — Queries, conexões, InnoDB do MariaDB
-- **Redis Dashboard** — Memória, hit ratio, comandos
-- **Logs / App** — Logs centralizados por serviço (selecionar em "App")
+- **Node Exporter Full** - CPU, RAM, disco, rede do host
+- **MySQL Overview** - Queries, conexões, InnoDB do MariaDB
+- **Redis Dashboard** - Memória, hit ratio, comandos
+- **Logs / App** - Logs centralizados por serviço (selecionar em "App")
 
 ---
 
@@ -275,7 +275,7 @@ Os backups são salvos em `./backups/` no host. Para sincronizar com S3:
 # Instalar AWS CLI na instância (se não tiver)
 sudo apt-get install -y awscli
 
-# Configurar credenciais (ou usar IAM Instance Profile — recomendado)
+# Configurar credenciais (ou usar IAM Instance Profile - recomendado)
 aws configure
 
 # Testar sincronização
@@ -310,10 +310,10 @@ scp -i ~/.ssh/minha-chave.pem -r \
 No Console AWS ou CLI:
 
 ```bash
-# Parar (preserva EBS — cobra ~USD 0,08/GB-mês)
+# Parar (preserva EBS - cobra ~USD 0,08/GB-mês)
 aws ec2 stop-instances --instance-ids <INSTANCE_ID>
 
-# Terminar (destrói tudo — sem custo residual)
+# Terminar (destrói tudo - sem custo residual)
 aws ec2 terminate-instances --instance-ids <INSTANCE_ID>
 ```
 
@@ -324,11 +324,11 @@ aws ec2 terminate-instances --instance-ids <INSTANCE_ID>
 | Aspecto | Local | AWS EC2 |
 |---|---|---|
 | DNS | automático (`.localhost`) | 2 registros `A` reais |
-| TLS | Caddy self-signed interno | Let's Encrypt — certificados reais |
+| TLS | Caddy self-signed interno | Let's Encrypt - certificados reais |
 | `GLPI_DOMAIN` | `glpi.localhost` | `glpi.seu-dominio.com.br` |
 | `GRAFANA_DOMAIN` | `grafana.glpi.localhost` | `grafana.glpi.seu-dominio.com.br` |
 | Custo | Zero | ~USD 0,083/h (t3.large) |
-| IP fixo | Sim | Muda a cada start — usar Elastic IP para DNS permanente |
+| IP fixo | Sim | Muda a cada start - usar Elastic IP para DNS permanente |
 | Backups | `./backups/` local | `./backups/` + S3 off-site |
 
 ### Elastic IP (recomendado para DNS permanente)
@@ -357,7 +357,7 @@ aws ec2 associate-address \
 ```bash
 docker compose logs caddy | grep -i "certificate\|acme\|tls\|error" | tail -30
 # Erros comuns:
-# - "no such host" → DNS não propagou — aguardar e fazer: docker compose restart caddy
+# - "no such host" → DNS não propagou - aguardar e fazer: docker compose restart caddy
 # - "connection refused on :80" → porta 80 bloqueada no Security Group
 # - "too many certificates" → limite Let's Encrypt (5/semana por domínio)
 ```
@@ -366,13 +366,13 @@ docker compose logs caddy | grep -i "certificate\|acme\|tls\|error" | tail -30
 
 ```bash
 sudo dmesg | grep -i "oom\|killed"
-# Solução: usar t3.large (8 GB) — t3.medium (4 GB) é insuficiente para a Fase 2
+# Solução: usar t3.large (8 GB) - t3.medium (4 GB) é insuficiente para a Fase 2
 ```
 
 ### setup-monitoring-user.sh: Access denied
 
 ```bash
-# O MariaDB ainda não terminou a inicialização — o script aguarda até 180s.
+# O MariaDB ainda não terminou a inicialização - o script aguarda até 180s.
 # Se falhou antes disso, reiniciar manualmente:
 docker compose restart mariadb
 ./scripts/setup-monitoring-user.sh

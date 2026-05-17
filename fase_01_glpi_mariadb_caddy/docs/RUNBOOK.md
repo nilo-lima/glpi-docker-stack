@@ -1,4 +1,4 @@
-# 📘 RUNBOOK — GLPI 11 Production
+# 📘 RUNBOOK - GLPI 11 Production
 
 > Procedimentos operacionais do dia-a-dia, incluindo cenários de emergência.
 
@@ -118,7 +118,7 @@ NEW_PASS=$(openssl rand -base64 24 | tr -d '@#%')
 docker compose exec mariadb mariadb -u root -p \
     -e "ALTER USER 'glpi'@'%' IDENTIFIED BY '$NEW_PASS'; FLUSH PRIVILEGES;"
 
-# 3. Atualizar .env — SEMPRE entre aspas duplas
+# 3. Atualizar .env - SEMPRE entre aspas duplas
 #    MARIADB_PASSWORD="<nova_senha>"
 #    Se trocar REDIS_PASSWORD, idem: REDIS_PASSWORD="<nova_senha>"
 
@@ -187,7 +187,7 @@ until [ "$(docker inspect --format='{{.State.Health.Status}}' \
   echo "Aguardando MariaDB..."; sleep 5
 done
 
-# 5. Restaurar — o script para/inicia glpi-app e glpi-cron automaticamente
+# 5. Restaurar - o script para/inicia glpi-app e glpi-cron automaticamente
 ./scripts/restore.sh
 
 # 6. Iniciar serviços restantes (caddy, backup)

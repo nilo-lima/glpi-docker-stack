@@ -1,6 +1,6 @@
 # Contribuindo
 
-Contribuições são bem-vindas — relatos de bugs, melhorias na documentação e pull requests com novas funcionalidades ou correções.
+Contribuições são bem-vindas - relatos de bugs, melhorias na documentação e pull requests com novas funcionalidades ou correções.
 
 ---
 
@@ -57,13 +57,13 @@ Para mudanças arquiteturais (novo serviço, alteração de rede, reestruturaç�
 - **Um serviço por container.** Não agrupe múltiplos processos.
 - **Sem secrets hardcoded.** Credenciais ficam no `.env`; referencie como `${VAR}`.
 - **Todo serviço novo precisa de healthcheck**, `restart: unless-stopped`, rotação de logs e `cap_drop: ALL`.
-- **Preserve os comentários** no `docker-compose.yml` — documentam decisões, não apenas configuração.
+- **Preserve os comentários** no `docker-compose.yml` - documentam decisões, não apenas configuração.
 - **Todo novo serviço precisa estar em pelo menos uma das redes** (`frontend_net`, `backend_net`, `monitoring_net`). Justifique a escolha.
 
 ### Scripts shell
 
 - Começar com `set -euo pipefail` e ser compatíveis com Bash 4+.
-- Variáveis de ambiente carregadas via `source .env` — não hardcode.
+- Variáveis de ambiente carregadas via `source .env` - não hardcode.
 
 ### Prometheus / Grafana
 

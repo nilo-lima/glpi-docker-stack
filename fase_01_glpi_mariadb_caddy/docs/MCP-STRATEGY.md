@@ -8,9 +8,9 @@
 ## Filosofia
 
 Claude Code já vem com capacidades nativas:
-- **Bash** — pode rodar `docker compose ps`, `docker logs`, `kubectl`, `terraform plan`, etc.
-- **File read/write/edit** — manipula arquivos diretamente
-- **Web search/fetch** — busca informações públicas
+- **Bash** - pode rodar `docker compose ps`, `docker logs`, `kubectl`, `terraform plan`, etc.
+- **File read/write/edit** - manipula arquivos diretamente
+- **Web search/fetch** - busca informações públicas
 
 Um MCP só vale se traz uma das três coisas:
 
@@ -18,19 +18,19 @@ Um MCP só vale se traz uma das três coisas:
 2. **Operações estruturadas** que seriam frágeis via shell scripting (ex: parsing de JSON complexo da AWS)
 3. **Sandboxing/segurança** (ex: rodar SQL contra um banco com permissões limitadas)
 
-Se um MCP só "embala" o que `bash` já faz, é **overhead** — consome contexto do Claude, expõe superfície de ataque, e atrapalha mais do que ajuda.
+Se um MCP só "embala" o que `bash` já faz, é **overhead** - consome contexto do Claude, expõe superfície de ataque, e atrapalha mais do que ajuda.
 
 ---
 
 ## Análise por MCP
 
-### ✅ Vale a pena — quando chegarmos lá
+### ✅ Vale a pena - quando chegarmos lá
 
 #### `hashicorp/terraform-mcp-server` (Fase 3)
 - **O que faz:** consulta a Terraform Registry em tempo real (versões atuais de providers, módulos validados, schema correto)
 - **Por que vale:** sem ele, o Claude gera Terraform com versões obsoletas (training cutoff). Problema real e documentado.
 - **Quando ativar:** ao iniciar a Fase 3 (migração para AWS)
-- **Riscos:** baixo — read-only por padrão. Para HCP Terraform Cloud, requer `TFE_TOKEN` (escopar permissions com cuidado).
+- **Riscos:** baixo - read-only por padrão. Para HCP Terraform Cloud, requer `TFE_TOKEN` (escopar permissions com cuidado).
 - **Como instalar:**
   ```bash
   claude mcp add terraform -s project -- \
@@ -41,7 +41,7 @@ Se um MCP só "embala" o que `bash` já faz, é **overhead** — consome context
 - **O que faz:** ler/criar issues, PRs, releases; ler GitHub Actions logs
 - **Por que vale:** permite que o Claude opere no fluxo de PR/issue sem você sair do terminal. Útil para automação de releases.
 - **Quando ativar:** quando criar GitHub Actions para o projeto (build/test do Dockerfile do backup, lint do compose, etc.)
-- **Riscos:** **médios** — requer Personal Access Token. Use **fine-grained PAT** com escopo restrito ao repo do projeto.
+- **Riscos:** **médios** - requer Personal Access Token. Use **fine-grained PAT** com escopo restrito ao repo do projeto.
 - **Como instalar:**
   ```bash
   claude mcp add github -s project -- \
@@ -52,7 +52,7 @@ Se um MCP só "embala" o que `bash` já faz, é **overhead** — consome context
 
 ---
 
-### ⚠️ Pode considerar — depende do estilo de operação
+### ⚠️ Pode considerar - depende do estilo de operação
 
 #### `ckreiling/mcp-server-docker` ou `QuantGeekDev/docker-mcp`
 - **O que fazem:** gerenciamento de containers via linguagem natural

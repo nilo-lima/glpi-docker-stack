@@ -1,8 +1,8 @@
 <div align="center">
 
-# 📊 GLPI 11 — Observabilidade (Fase 2)
+# 📊 GLPI 11 - Observabilidade (Fase 2)
 
-**Stack unificada de 14 containers: GLPI completo + Prometheus, Grafana, Loki, Promtail e Alertmanager — métricas, dashboards e logs centralizados em um único `docker compose up`.**
+**Stack unificada de 14 containers: GLPI completo + Prometheus, Grafana, Loki, Promtail e Alertmanager - métricas, dashboards e logs centralizados em um único `docker compose up`.**
 
 ![Prometheus](https://img.shields.io/badge/Prometheus-v2.55.1-E6522C?style=flat-square&logo=prometheus&logoColor=white)
 ![Grafana](https://img.shields.io/badge/Grafana-11.4.0-F46800?style=flat-square&logo=grafana&logoColor=white)
@@ -19,7 +19,7 @@
 
 ## 📋 Sobre
 
-A Fase 2 estende a Fase 1 com **observabilidade completa**: coleta de métricas via Prometheus, dashboards no Grafana, logs centralizados com Loki + Promtail e alertas via Alertmanager. A stack é **auto-suficiente** — inclui todos os serviços GLPI da Fase 1 mais os 8 novos serviços de monitoramento.
+A Fase 2 estende a Fase 1 com **observabilidade completa**: coleta de métricas via Prometheus, dashboards no Grafana, logs centralizados com Loki + Promtail e alertas via Alertmanager. A stack é **auto-suficiente** - inclui todos os serviços GLPI da Fase 1 mais os 8 novos serviços de monitoramento.
 
 | Componente | Função |
 |:---|:---|
@@ -97,19 +97,19 @@ flowchart TB
 | Serviço | Imagem | Portas (host) |
 |:---|:---|:---|
 | `caddy` | `caddy:2.8-alpine` | `80`, `443`, `443/udp` |
-| `glpi-app` | `glpi/glpi:11.0.7` | — |
-| `glpi-cron` | `glpi/glpi:11.0.7` | — |
-| `mariadb` | `mariadb:11.4` | — |
-| `redis` | `redis:7.4-alpine` | — |
-| `backup` | `glpi-dev/backup:1.0` | — |
-| `prometheus` | `prom/prometheus:v2.55.1` | — |
-| `node-exporter` | `prom/node-exporter:v1.8.2` | — |
-| `mysqld-exporter` | `prom/mysqld-exporter:v0.16.0` | — |
-| `redis-exporter` | `oliver006/redis_exporter:v1.66.0` | — |
-| `grafana` | `grafana/grafana:11.4.0` | — |
-| `loki` | `grafana/loki:3.3.2` | — |
-| `promtail` | `grafana/promtail:3.3.2` | — |
-| `alertmanager` | `prom/alertmanager:v0.27.0` | — |
+| `glpi-app` | `glpi/glpi:11.0.7` | - |
+| `glpi-cron` | `glpi/glpi:11.0.7` | - |
+| `mariadb` | `mariadb:11.4` | - |
+| `redis` | `redis:7.4-alpine` | - |
+| `backup` | `glpi-dev/backup:1.0` | - |
+| `prometheus` | `prom/prometheus:v2.55.1` | - |
+| `node-exporter` | `prom/node-exporter:v1.8.2` | - |
+| `mysqld-exporter` | `prom/mysqld-exporter:v0.16.0` | - |
+| `redis-exporter` | `oliver006/redis_exporter:v1.66.0` | - |
+| `grafana` | `grafana/grafana:11.4.0` | - |
+| `loki` | `grafana/loki:3.3.2` | - |
+| `promtail` | `grafana/promtail:3.3.2` | - |
+| `alertmanager` | `prom/alertmanager:v0.27.0` | - |
 
 > Nenhuma porta de banco, cache ou monitoramento é exposta no host. Grafana é acessado exclusivamente via Caddy com TLS.
 
@@ -117,7 +117,7 @@ flowchart TB
 
 ## ✅ Pré-requisitos
 
-- Stack da Fase 1 **não precisa estar rodando** — esta fase é auto-suficiente
+- Stack da Fase 1 **não precisa estar rodando** - esta fase é auto-suficiente
 - Docker Engine >= 24.x e Docker Compose v2 >= 2.20
 - Portas `80` e `443` disponíveis no host
 - DNS apontando para o host (ou use `.localhost` para testes locais)
@@ -160,7 +160,7 @@ docker compose ps
 | GLPI | `https://${GLPI_DOMAIN}` |
 | Grafana | `https://${GRAFANA_DOMAIN}` |
 
-Login GLPI inicial: `glpi` / `glpi` — **troque imediatamente.**
+Login GLPI inicial: `glpi` / `glpi` - **troque imediatamente.**
 Login Grafana: `admin` / `${GRAFANA_ADMIN_PASSWORD}`
 
 ### Pós-instalação (uma vez)
@@ -226,7 +226,7 @@ Para explorar logs diretamente: **Explore → Logs (Loki)**
 
 ## 🔔 Alertas
 
-O Alertmanager está configurado como **stub** (blackhole) — os alertas são gerados mas descartados. Para configurar notificações reais, edite `services/alertmanager/config/alertmanager.yml` e adicione um receiver (e-mail, Slack, PagerDuty, etc.).
+O Alertmanager está configurado como **stub** (blackhole) - os alertas são gerados mas descartados. Para configurar notificações reais, edite `services/alertmanager/config/alertmanager.yml` e adicione um receiver (e-mail, Slack, PagerDuty, etc.).
 
 Alertas pré-configurados no Prometheus:
 
@@ -308,7 +308,7 @@ docker compose restart mysqld-exporter
 
 ### Promtail unhealthy (imagem sem `wget`)
 
-`grafana/promtail:3.3.2` não inclui `wget`. O healthcheck usa `bash /dev/tcp` — se o container aparecer unhealthy mesmo funcionando, reinicie:
+`grafana/promtail:3.3.2` não inclui `wget`. O healthcheck usa `bash /dev/tcp` - se o container aparecer unhealthy mesmo funcionando, reinicie:
 
 ```bash
 docker compose restart promtail
@@ -339,7 +339,7 @@ Logs só existem a partir do momento em que o Promtail subiu com a configuraçã
 
 ### `Access denied` ao rodar `setup-monitoring-user.sh`
 
-O script tenta conectar antes do MariaDB terminar a inicialização. O script aguarda até 180s pelo status `healthy` — se falhar antes disso:
+O script tenta conectar antes do MariaDB terminar a inicialização. O script aguarda até 180s pelo status `healthy` - se falhar antes disso:
 
 ```bash
 # Verificar status do container
@@ -385,7 +385,7 @@ docker compose config --quiet && echo "OK"
 
 - ✅ Versões pinadas em todas as 14 imagens (jamais `:latest`)
 - ✅ 3 redes segregadas por função (frontend / backend / monitoring)
-- ✅ Grafana acessado via Caddy com TLS — sem porta exposta no host
+- ✅ Grafana acessado via Caddy com TLS - sem porta exposta no host
 - ✅ Banco e cache sem porta exposta no host
 - ✅ `cap_drop: ALL` + `cap_add` mínimo em todos os containers
 - ✅ `no-new-privileges:true` em todos os containers
@@ -394,7 +394,7 @@ docker compose config --quiet && echo "OK"
 - ✅ Limites de memória explícitos em todos os containers
 - ✅ Logs JSON com rotação (`max-size: 10m`, `max-file: 5`)
 - ✅ Usuário dedicado `monitoring` com privilégios mínimos no MariaDB
-- ✅ Credenciais do exporter em `.my.cnf` (não em `DATA_SOURCE_NAME` — evita problemas com `@`/`#` em senhas)
+- ✅ Credenciais do exporter em `.my.cnf` (não em `DATA_SOURCE_NAME` - evita problemas com `@`/`#` em senhas)
 - ✅ 4 dashboards provisionados automaticamente via YAML (sem clique manual)
 - ✅ Datasources Prometheus e Loki provisionados automaticamente
 - ✅ 11 regras de alerta pré-configuradas
@@ -403,16 +403,16 @@ docker compose config --quiet && echo "OK"
 
 ## 🗺️ Roadmap
 
-### Fase 1 — Production Stack ✅
+### Fase 1 - Production Stack ✅
 Stack base com 6 containers, TLS automático, backup agendado.
 
-### Fase 2 — Observabilidade ✅
+### Fase 2 - Observabilidade ✅
 Prometheus + Grafana + Loki + Promtail + Alertmanager. Stack unificada de 14 containers.
 
-### Fase 3 — AWS com Terraform
+### Fase 3 - AWS com Terraform
 VPC, EC2, Security Groups, S3 para backups off-site, ACM para TLS gerenciado.
 
-### Fase 4 — Melhorias
+### Fase 4 - Melhorias
 CrowdSec (WAF/anti-bruteforce), CI/CD com GitHub Actions, Helm chart para Kubernetes.
 
 ---

@@ -1,4 +1,4 @@
-# 📘 RUNBOOK — GLPI 11 + Observabilidade (Fase 2)
+# 📘 RUNBOOK - GLPI 11 + Observabilidade (Fase 2)
 
 > Procedimentos operacionais do dia-a-dia, incluindo cenários de emergência.
 
@@ -103,7 +103,7 @@ ls -laSh backups/
 # Reduzir BACKUP_RETENTION_DAYS no .env se necessário
 
 # Retenção de métricas (ajustar PROMETHEUS_RETENTION no .env)
-# Padrão: 30d — reduzir para 15d e recriar o container
+# Padrão: 30d - reduzir para 15d e recriar o container
 docker compose up -d --force-recreate --no-deps prometheus
 ```
 
@@ -150,7 +150,7 @@ curl -fsSL "https://grafana.com/api/dashboards/12345/revisions/latest/download" 
 sed -i 's/\${DS_PROMETHEUS}/prometheus/g' services/grafana/provisioning/dashboards/meu-dashboard.json
 sed -i 's/\${DS_LOKI}/loki/g' services/grafana/provisioning/dashboards/meu-dashboard.json
 
-# Recarregar (ou aguardar 30s — o provider faz polling automático)
+# Recarregar (ou aguardar 30s - o provider faz polling automático)
 docker compose restart grafana
 ```
 
@@ -197,7 +197,7 @@ ls -lh backups/ | tail -5
 ### Sincronização off-site de backups
 
 ```bash
-# No crontab do HOST — executar após o backup das 03:00
+# No crontab do HOST - executar após o backup das 03:00
 # 0 4 * * * rclone sync /opt/glpi/fase_02/backups/ s3:meu-bucket/glpi-backups/ --transfers=4
 
 # Verificar
