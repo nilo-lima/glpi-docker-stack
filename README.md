@@ -28,7 +28,7 @@ O projeto segue princípios de **infraestrutura como código**, **defesa em prof
 | Fase | Diretório | Status | Descrição |
 |:---:|:---|:---:|:---|
 | 1 | [`fase_01_glpi_mariadb_caddy/`](fase_01_glpi_mariadb_caddy/) | ✅ Concluída | Stack base: GLPI 11 + MariaDB + Redis + Caddy (TLS) + Backup agendado |
-| 2 | `fase_02_Observabilidade/` | 🔜 Planejada | Prometheus + Grafana + Loki + Promtail + Alertmanager |
+| 2 | [`fase_02_Observabilidade/`](fase_02_Observabilidade/) | ✅ Concluída | Stack unificada de 14 containers: Fase 1 + Prometheus + Grafana + Loki + Promtail + Alertmanager |
 | 3 | `fase_03_AWS_Terraform/` | 🔜 Planejada | VPC, EC2, RDS, ElastiCache, S3, ALB — IaC completo em Terraform |
 
 ---
@@ -50,12 +50,32 @@ O projeto segue princípios de **infraestrutura como código**, **defesa em prof
 
 ---
 
+## Fase 2 — Observabilidade
+
+Stack unificada de **14 containers**: todos os serviços da Fase 1 + observabilidade completa. Um único `docker compose up -d` entrega GLPI funcional com métricas, dashboards e logs centralizados.
+
+| Container | Tecnologia | Função |
+|:---|:---|:---|
+| *(6 serviços da Fase 1)* | — | GLPI, banco, cache, proxy, backup |
+| `prometheus` | Prometheus v2.55.1 | Coleta e armazena métricas |
+| `node-exporter` | node-exporter v1.8.2 | Métricas do host (CPU, RAM, disco) |
+| `mysqld-exporter` | mysqld-exporter v0.16.0 | Métricas do MariaDB |
+| `redis-exporter` | redis_exporter v1.66.0 | Métricas do Redis |
+| `grafana` | Grafana 11.4.0 | Dashboards — acessado via Caddy com TLS |
+| `loki` | Loki 3.3.2 | Agregação e armazenamento de logs |
+| `promtail` | Promtail 3.3.2 | Coleta logs de todos os containers |
+| `alertmanager` | Alertmanager v0.27.0 | Roteamento de alertas |
+
+→ Veja o [README completo da Fase 2](fase_02_Observabilidade/README.md) para instalação, variáveis e operação.
+
+---
+
 ## Estrutura do Repositório
 
 ```
 .
 ├── fase_01_glpi_mariadb_caddy/   # Stack base (concluída)
-├── fase_02_Observabilidade/      # Observabilidade (planejada)
+├── fase_02_Observabilidade/      # Observabilidade (concluída)
 ├── fase_03_AWS_Terraform/        # AWS + IaC (planejada)
 └── .github/
     └── ISSUE_TEMPLATE/           # Templates de bug report e feature request

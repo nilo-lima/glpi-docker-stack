@@ -4,3 +4,78 @@ Thumbs.db
 *.swp
 *~
 sources/
+
+# --- Claude Code (não versionar — contém paths e secrets locais) ---
+.claude/
+.mcp.json
+CLAUDE.md
+CLAUDE.local.md
+# ==============================================================================
+#  .gitignore — GLPI 11 Production
+#  Blindagem contra vazamento de credenciais e dados de produção.
+# ==============================================================================
+
+# --- Segredos e configuração local ---
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+secrets/
+.secrets/
+
+# --- Dados persistentes (jamais versionar) ---
+services/caddy/data/*
+!services/caddy/data/.gitkeep
+services/caddy/config/*.json
+backups/
+data/
+volumes/
+
+# --- Logs ---
+*.log
+logs/
+services/*/logs/
+
+# --- Arquivos temporários ---
+*.tmp
+*.swp
+*.bak
+*~
+.DS_Store
+Thumbs.db
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.sublime-*
+
+# --- Python (utilitários) ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- Node (caso adicione frontend tooling) ---
+node_modules/
+
+# --- Docker overrides locais ---
+docker-compose.override.yml
+docker-compose.local.yml
+
+# --- Dumps de banco ---
+*.sql
+*.sql.gz
+*.dump
+
+# --- Claude Code: settings locais com secrets de MCP ---
+.claude/settings.local.json
+.claude/settings.json
+CLAUDE.local.md
+
+# Auto-memory do Claude Code (se for armazenada localmente)
+.claude/memory/
+.claude/projects/
