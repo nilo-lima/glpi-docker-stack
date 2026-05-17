@@ -1,0 +1,14 @@
+# ==============================================================================
+#  mysqld-exporter — Arquivo de credenciais (.my.cnf)
+# ==============================================================================
+#  Este arquivo NÃO é commitado (gitignored).
+#  É gerado automaticamente pelo script: ./scripts/setup-monitoring-user.sh
+#
+#  Para gerar manualmente, substitua a senha e salve como .my.cnf (sem .example):
+# ==============================================================================
+
+[client]
+user     = monitoring
+host     = mariadb
+port     = 3306
+password = SUA_SENHA_AQUI

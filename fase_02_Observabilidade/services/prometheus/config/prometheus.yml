@@ -1,0 +1,55 @@
+# ==============================================================================
+#  Prometheus — Configuração de Scraping e Alertas
+# ==============================================================================
+global:
+  scrape_interval: 15s       # frequência de coleta de métricas
+  evaluation_interval: 15s   # frequência de avaliação das regras de alerta
+  scrape_timeout: 10s
+
+  external_labels:
+    environment: production
+    project: glpi
+
+# Envio de alertas disparados para o Alertmanager
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Arquivos de regras de alerta
+rule_files:
+  - /etc/prometheus/alerts/*.yml
+
+# ==============================================================================
+# Jobs de Scraping
+# ==============================================================================
+scrape_configs:
+
+  # --------------------------------------------------------------------------
+  # Prometheus — auto-monitoramento
+  # --------------------------------------------------------------------------
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+
+  # --------------------------------------------------------------------------
+  # Node Exporter — métricas do host (CPU, RAM, disco, rede)
+  # --------------------------------------------------------------------------
+  - job_name: node
+    static_configs:
+      - targets: [node-exporter:9100]
+
+  # --------------------------------------------------------------------------
+  # mysqld-exporter — métricas do MariaDB
+  # --------------------------------------------------------------------------
+  - job_name: mariadb
+    static_configs:
+      - targets: [mysqld-exporter:9104]
+
+  # --------------------------------------------------------------------------
+  # redis-exporter — métricas do Redis
+  # --------------------------------------------------------------------------
+  - job_name: redis
+    static_configs:
+      - targets: [redis-exporter:9121]

@@ -1,0 +1,30 @@
+# ==============================================================================
+#  Grafana — Provider de Dashboards
+# ==============================================================================
+#  Dashboards JSON colocados nesta mesma pasta são carregados automaticamente.
+#
+#  Dashboards recomendados para baixar em https://grafana.com/grafana/dashboards/
+#  e salvar como <nome>.json nesta pasta:
+#
+#    ID 1860  — Node Exporter Full        (métricas de host)
+#    ID 14057 — MySQL Overview            (MariaDB — usar datasource Prometheus)
+#    ID 14091 — Redis Dashboard for Prometheus Exporter
+#    ID 13639 — Loki Dashboard quickstart
+#
+#  Após adicionar um JSON, reinicie o Grafana:
+#    docker compose restart grafana
+# ==============================================================================
+apiVersion: 1
+
+providers:
+  - name: glpi-production
+    orgId: 1
+    folder: GLPI Production
+    folderUid: glpi-production
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false
