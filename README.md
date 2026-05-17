@@ -96,3 +96,14 @@ Veja [CONTRIBUTING.md](fase_01_glpi_mariadb_caddy/CONTRIBUTING.md) para as conve
 Distribuído sob a licença **MIT**. Veja [LICENSE](LICENSE) para mais informações.
 
 GLPI é distribuído sob **GPL-3.0** - ver [glpi-project.org](https://www.glpi-project.org).
+
+---
+
+## Apoie meu trabalho
+
+Se você gosta dos meus projetos, considere:
+- ⭐ Dar uma estrela nos repositórios.
+- 🐛 Reportar bugs ou melhorias.
+- 🤝 Contribuir com código.
+- 💎 Me indicar para o [GitHub Stars](https://stars.github.com/nominate/).
+- 🐈‍⬛ Acessar meu perfil [Nilo Lima Jr](https://github.com/nilo-lima/).
