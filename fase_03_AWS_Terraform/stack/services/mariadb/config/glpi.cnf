@@ -1,0 +1,68 @@
+# ==============================================================================
+#  MariaDB — Configuração otimizada para GLPI 11
+# ==============================================================================
+#  Baseado nas recomendações oficiais:
+#    https://glpi-install.readthedocs.io/en/latest/prerequisites.html
+#
+#  Ajuste innodb_buffer_pool_size conforme RAM disponível.
+#  Regra prática: 50% a 70% da RAM dedicada ao MariaDB.
+# ==============================================================================
+
+[mariadb]
+
+# --- Charset / Collation (obrigatório para GLPI 11) ---
+character-set-server     = utf8mb4
+collation-server         = utf8mb4_unicode_ci
+skip-character-set-client-handshake
+
+# --- InnoDB ---
+default-storage-engine   = InnoDB
+innodb_file_per_table    = 1
+innodb_buffer_pool_size  = 1G
+innodb_log_file_size     = 256M
+innodb_flush_log_at_trx_commit = 2
+innodb_flush_method      = O_DIRECT
+
+# --- Conexões ---
+max_connections          = 200
+max_allowed_packet       = 64M
+thread_cache_size        = 16
+
+# --- Tabelas temporárias / heap ---
+tmp_table_size           = 64M
+max_heap_table_size      = 64M
+
+# --- Query cache (desativado em MariaDB 11.x — InnoDB buffer é suficiente) ---
+# query_cache_type       = 0
+# query_cache_size       = 0
+
+# --- SQL Mode recomendado pelo GLPI ---
+# (NO_ENGINE_SUBSTITUTION é o padrão; evitamos STRICT que pode quebrar updates)
+sql_mode                 = NO_ENGINE_SUBSTITUTION
+
+# --- Timezone ---
+default-time-zone        = '+00:00'
+
+# --- Logs ---
+slow_query_log           = 1
+slow_query_log_file      = /var/log/mysql/slow.log
+long_query_time          = 2
+log_warnings             = 2
+
+# --- Binlog (útil para replicação futura e PITR) ---
+log_bin                  = mysql-bin
+binlog_format            = ROW
+expire_logs_days         = 7
+max_binlog_size          = 100M
+
+# --- Segurança ---
+local_infile             = 0
+skip_name_resolve        = 1
+
+[client]
+default-character-set    = utf8mb4
+
+[mysqldump]
+default-character-set    = utf8mb4
+single-transaction       = 1
+quick                    = 1

@@ -1,0 +1,71 @@
+# =============================================================================
+# terraform.tfvars.example
+# =============================================================================
+# Copie para terraform.tfvars e preencha com seus valores reais.
+# O arquivo terraform.tfvars esta no .gitignore (contem senhas).
+#
+# COMO COMECAR:
+#   cp terraform.tfvars.example terraform.tfvars
+#   chmod 600 terraform.tfvars
+#   nano terraform.tfvars     # Edite os campos TROCAR_*
+# =============================================================================
+
+# --- Geral ---
+project_name = "glpi-fase3"
+environment  = "prod"
+aws_region   = "us-east-1"
+
+# --- Rede ---
+# Descubra seu IP publico: curl -s https://checkip.amazonaws.com
+# NUNCA use 0.0.0.0/0 (expoe SSH para todo o mundo)
+admin_cidr_blocks = ["TROCAR_SEU_IP_AQUI/32"]
+
+# --- Compute ---
+# t3.large = 2 vCPU, 8 GB RAM (minimo para 14 containers da Fase 2)
+# t3.medium = 4 GB, apenas para teste com stack reduzida
+instance_type       = "t3.large"
+root_volume_size_gb = 30
+
+# Conteudo da sua chave publica SSH (cat ~/.ssh/id_rsa.pub)
+ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... seu-usuario@seu-host"
+
+# URL do repositorio Git com o projeto
+repo_url    = "https://github.com/nilo-lima/glpi-docker-stack.git"
+repo_branch = "main"
+
+# --- DNS ---
+# Dominio base registrado no registrador (ex: Registro.br)
+# Apos o apply, configure os nameservers do output no painel do registrador
+domain          = "TROCAR_SEU_DOMINIO.com.br"
+create_dns_zone = true
+glpi_subdomain  = "glpi"
+grafana_subdomain = "grafana.glpi"
+
+# Email para notificacoes do Let's Encrypt (aviso de expiracao do cert)
+acme_email = "TROCAR_SEU_EMAIL@exemplo.com"
+
+# --- Senhas do GLPI (injetadas no .env da EC2 via user_data) ---
+# IMPORTANTE: nao use @ ou / nas senhas do MariaDB e Redis
+# (quebram parsing do DSN nos exporters)
+#
+# Geradores sugeridos:
+#   Geral:     openssl rand -base64 32
+#   Sem @//:   openssl rand -base64 18 | tr -d '@/+'
+#   Hex 32:    openssl rand -hex 32      (para grafana_secret_key)
+
+mariadb_root_password       = "TROCAR_SENHA_ROOT_MARIADB"
+mariadb_password            = "TROCAR_SENHA_GLPI_MARIADB"
+redis_password              = "TROCAR_SENHA_REDIS"            # Sem @ ou /
+mariadb_monitoring_password = "TROCAR_SENHA_MONITORING"       # Sem @ ou /
+grafana_admin_password      = "TROCAR_SENHA_ADMIN_GRAFANA"
+grafana_secret_key          = "TROCAR_CHAVE_HEX_32_BYTES"    # openssl rand -hex 32
+
+# --- Versoes de imagens Docker ---
+# Manter sincronizado com fase_02_Observabilidade/.env.example
+glpi_image_tag    = "11.0.7"
+mariadb_image_tag = "11.4"
+redis_image_tag   = "7.4-alpine"
+
+# --- Storage ---
+# 0 = nunca expirar backups
+backup_retention_days = 365

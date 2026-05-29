@@ -1,0 +1,791 @@
+# ==============================================================================
+#  GLPI 11 + Observabilidade — docker-compose.yml unificado
+# ==============================================================================
+#  Stack completa: 6 serviços GLPI (Fase 1) + 8 de monitoramento (Fase 2)
+#
+#  Topologia GLPI:
+#    [caddy] ──TLS──> [glpi-app] ──> [mariadb]
+#                         │
+#                         ├──> [redis]     (cache + sessões)
+#                         │
+#                    [glpi-cron]           (worker de tarefas agendadas)
+#                    [backup]              (dump diário do MariaDB)
+#
+#  Topologia Observabilidade:
+#    [prometheus] ──scrapes──> [node-exporter]     (métricas do host)
+#         │                   [mysqld-exporter] ──> mariadb
+#         │                   [redis-exporter]  ──> redis
+#         │                   [alertmanager]        (alertas stub)
+#         │                   [loki]                (logs)
+#         └──query──> [grafana] <──push── [promtail] (coleta logs Docker)
+#
+#  Redes:
+#    frontend_net  : caddy, glpi-app, grafana
+#    backend_net   : glpi-app, glpi-cron, mariadb, redis, backup,
+#                    mysqld-exporter, redis-exporter
+#    monitoring_net: prometheus, node-exporter, mysqld-exporter,
+#                    redis-exporter, grafana, loki, promtail, alertmanager
+#
+#  Princípios:
+#    - Versões fixas (jamais "latest")
+#    - cap_drop: ALL + no-new-privileges em todos os containers
+#    - Healthchecks em todos os serviços
+#    - Volumes nomeados para dados persistentes
+#    - Logs JSON com rotação 10m×5
+# ==============================================================================
+
+name: ${COMPOSE_PROJECT_NAME:-glpi-dev}
+
+# ------------------------------------------------------------------------------
+# Anchors YAML reutilizáveis (DRY)
+# ------------------------------------------------------------------------------
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-security-defaults: &security-defaults
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+
+# ==============================================================================
+# SERVIÇOS
+# ==============================================================================
+services:
+
+  # ============================================================================
+  # FASE 1 — GLPI Stack
+  # ============================================================================
+
+  # ---------------------------------------------------------------------------
+  # MariaDB — banco de dados
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: persistência de dados é responsabilidade única
+  # do banco. Isolamento permite escalar/substituir/backupear sem tocar na app.
+  # Sem porta exposta no host — acesso apenas via rede interna.
+  # ---------------------------------------------------------------------------
+  mariadb:
+    image: mariadb:${MARIADB_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-mariadb
+    hostname: mariadb
+    <<: *security-defaults
+    logging: *default-logging
+
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      MARIADB_AUTO_UPGRADE: "1"
+      TZ: ${TZ}
+
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./services/mariadb/config/glpi.cnf:/etc/mysql/conf.d/glpi.cnf:ro
+      - ./services/mariadb/init:/docker-entrypoint-initdb.d:ro
+
+    networks:
+      - backend_net
+
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+    deploy:
+      resources:
+        limits:
+          memory: ${MARIADB_MEMORY_LIMIT}
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE   # MariaDB precisa para gerenciar arquivos de dados
+
+  # ---------------------------------------------------------------------------
+  # Redis — cache e armazenamento de sessões
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: cache em memória é serviço autônomo. Permite
+  # zerar cache/reiniciar sem afetar GLPI ou MariaDB. Suporta escalar (cluster).
+  # Sem porta exposta no host — acesso apenas via rede interna.
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:${REDIS_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-redis
+    hostname: redis
+    <<: *security-defaults
+    logging: *default-logging
+
+    command:
+      - redis-server
+      - /usr/local/etc/redis/redis.conf
+      - --requirepass
+      - ${REDIS_PASSWORD}
+
+    volumes:
+      - redis_data:/data
+      - ./services/redis/config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+
+    networks:
+      - backend_net
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "--no-auth-warning", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_MEMORY_LIMIT}
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=32M
+
+  # ---------------------------------------------------------------------------
+  # GLPI — aplicação web (PHP-FPM + Apache)
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: regra de ouro — 1 container = 1 serviço.
+  # A aplicação é stateless (estado em mariadb + redis + volume de files),
+  # permitindo escalar horizontalmente no futuro.
+  # ---------------------------------------------------------------------------
+  glpi-app:
+    image: glpi/glpi:${GLPI_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-app
+    hostname: glpi-app
+    <<: *security-defaults
+    logging: *default-logging
+
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    environment:
+      GLPI_DB_HOST: mariadb
+      GLPI_DB_PORT: 3306
+      GLPI_DB_NAME: ${MARIADB_DATABASE}
+      GLPI_DB_USER: ${MARIADB_USER}
+      GLPI_DB_PASSWORD: ${MARIADB_PASSWORD}
+      GLPI_SKIP_AUTOINSTALL: ${GLPI_SKIP_AUTOINSTALL}
+      GLPI_SKIP_AUTOUPDATE: ${GLPI_SKIP_AUTOUPDATE}
+      GLPI_CRONTAB_ENABLED: "false"   # cron roda no container dedicado
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TZ: ${TZ}
+
+    volumes:
+      - glpi_data:/var/glpi
+      - ./services/glpi/config/zz-glpi-custom.ini:/usr/local/etc/php/conf.d/zz-glpi-custom.ini:ro
+      - ./services/glpi/healthcheck/health:/var/www/glpi/public/health:ro
+      - ./services/glpi/config/zzz-reverse-proxy.conf:/etc/apache2/conf-enabled/zzz-reverse-proxy.conf:ro
+
+    networks:
+      - frontend_net   # acessível pelo Caddy
+      - backend_net    # acessa mariadb e redis
+
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--max-time", "5", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+    deploy:
+      resources:
+        limits:
+          memory: ${GLPI_MEMORY_LIMIT}
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE   # Apache precisa para bind na porta 80 interna
+
+  # ---------------------------------------------------------------------------
+  # GLPI Cron — worker de tarefas agendadas
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: separar worker do front-end web garante que
+  # jobs agendados não são executados em duplicidade em escala horizontal.
+  # ---------------------------------------------------------------------------
+  glpi-cron:
+    image: glpi/glpi:${GLPI_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-cron
+    hostname: glpi-cron
+    <<: *security-defaults
+    logging: *default-logging
+
+    depends_on:
+      glpi-app:
+        condition: service_healthy
+
+    environment:
+      GLPI_DB_HOST: mariadb
+      GLPI_DB_PORT: 3306
+      GLPI_DB_NAME: ${MARIADB_DATABASE}
+      GLPI_DB_USER: ${MARIADB_USER}
+      GLPI_DB_PASSWORD: ${MARIADB_PASSWORD}
+      GLPI_SKIP_AUTOINSTALL: "true"
+      GLPI_SKIP_AUTOUPDATE: "true"
+      GLPI_CRONTAB_ENABLED: "true"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TZ: ${TZ}
+
+    volumes:
+      - glpi_data:/var/glpi
+      - ./services/glpi/config/zz-glpi-custom.ini:/usr/local/etc/php/conf.d/zz-glpi-custom.ini:ro
+      - ./services/glpi/config/zzz-reverse-proxy.conf:/etc/apache2/conf-enabled/zzz-reverse-proxy.conf:ro
+
+    networks:
+      - backend_net
+
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "cron"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+
+  # ---------------------------------------------------------------------------
+  # Caddy — reverse proxy + TLS automático (Let's Encrypt)
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: TLS termination e reverse proxy são respons-
+  # abilidades de borda. Caddy gerencia certificados automaticamente e expõe
+  # tanto o GLPI (GLPI_DOMAIN) quanto o Grafana (GRAFANA_DOMAIN) via HTTPS.
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:${CADDY_IMAGE_TAG}
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-caddy
+    hostname: caddy
+    <<: *security-defaults
+    logging: *default-logging
+
+    depends_on:
+      glpi-app:
+        condition: service_healthy
+
+    environment:
+      GLPI_DOMAIN: ${GLPI_DOMAIN}
+      GRAFANA_DOMAIN: ${GRAFANA_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+
+    volumes:
+      - ./services/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+    networks:
+      - frontend_net
+
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3 (QUIC)
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "--tries=1", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE   # bind nas portas 80/443
+
+  # ---------------------------------------------------------------------------
+  # Backup — dump agendado do MariaDB com retenção
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: backup é responsabilidade isolada. Pode ser
+  # substituído por solução cloud (Restic + S3) sem alterar a stack.
+  # ---------------------------------------------------------------------------
+  backup:
+    build:
+      context: ./services/backup
+      dockerfile: Dockerfile
+    image: ${COMPOSE_PROJECT_NAME:-glpi-dev}/backup:1.0
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-backup
+    hostname: backup
+    <<: *security-defaults
+    logging: *default-logging
+
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+    environment:
+      MARIADB_HOST: mariadb
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+      BACKUP_CRON_SCHEDULE: ${BACKUP_CRON_SCHEDULE}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS}
+      TZ: ${TZ}
+
+    volumes:
+      - ./backups:/backups
+      - glpi_data:/glpi-data:ro
+
+    networks:
+      - backend_net
+
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "entrypoint.sh"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+
+  # ============================================================================
+  # FASE 2 — Observabilidade
+  # ============================================================================
+
+  # ---------------------------------------------------------------------------
+  # Prometheus — motor de coleta e armazenamento de métricas (TSDB)
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: TSDB com ciclo de vida próprio (retenção,
+  # compactação, WAL). Grafana apenas consulta; Alertmanager apenas recebe.
+  # Sem porta exposta no host — Grafana faz queries internamente.
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-prometheus
+    hostname: prometheus
+    <<: *security-defaults
+    logging: *default-logging
+
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
+      - --web.enable-lifecycle
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+
+    volumes:
+      - prometheus_data:/prometheus
+      - ./services/prometheus/config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./services/prometheus/config/alerts:/etc/prometheus/alerts:ro
+
+    networks:
+      - monitoring_net
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+    deploy:
+      resources:
+        limits:
+          memory: ${PROMETHEUS_MEMORY_LIMIT:-1G}
+
+    cap_drop:
+      - ALL
+
+  # ---------------------------------------------------------------------------
+  # Node Exporter — métricas do host (CPU, memória, disco, rede)
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: coleta métricas do SO via /proc e /sys.
+  # pid:host para enxergar processos do host. Stateless — sem dados persistidos.
+  # ---------------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-node-exporter
+    hostname: node-exporter
+    <<: *security-defaults
+    logging: *default-logging
+
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+      - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$$
+
+    pid: host   # compartilha PID namespace com o host para métricas de processo
+
+    volumes:
+      - /:/host:ro,rslave
+
+    networks:
+      - monitoring_net
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9100/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          memory: ${NODE_EXPORTER_MEMORY_LIMIT:-64M}
+
+    cap_drop:
+      - ALL
+
+    read_only: true
+
+  # ---------------------------------------------------------------------------
+  # mysqld-exporter — métricas do MariaDB
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: exporter stateless que converte métricas SQL
+  # em formato Prometheus. Vive na backend_net (alcança mariadb) e na
+  # monitoring_net (Prometheus scrape). Usa .my.cnf para credenciais — suporta
+  # senhas com caracteres especiais sem problemas de DSN encoding.
+  # ---------------------------------------------------------------------------
+  mysqld-exporter:
+    image: prom/mysqld-exporter:v0.16.0
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-mysqld-exporter
+    hostname: mysqld-exporter
+    <<: *security-defaults
+    logging: *default-logging
+
+    command:
+      - --config.my-cnf=/etc/mysqld-exporter/.my.cnf
+
+    volumes:
+      # Gerado por: ./scripts/setup-monitoring-user.sh
+      - ./services/mysqld-exporter/config/.my.cnf:/etc/mysqld-exporter/.my.cnf:ro
+
+    networks:
+      - monitoring_net
+      - backend_net    # alcança o MariaDB via DNS interno
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9104/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+    deploy:
+      resources:
+        limits:
+          memory: ${MYSQLD_EXPORTER_MEMORY_LIMIT:-64M}
+
+    cap_drop:
+      - ALL
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=16M
+
+  # ---------------------------------------------------------------------------
+  # redis-exporter — métricas do Redis
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: exporter stateless análogo ao mysqld-exporter.
+  # Alcança o Redis autenticado via DNS interno (backend_net).
+  # ---------------------------------------------------------------------------
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-redis-exporter
+    hostname: redis-exporter
+    <<: *security-defaults
+    logging: *default-logging
+
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+
+    networks:
+      - monitoring_net
+      - backend_net    # alcança o Redis via DNS interno
+
+    healthcheck:
+      # oliver006/redis_exporter usa imagem scratch (sem shell/wget) — healthcheck interno impossível.
+      # Saúde monitorada pelo Prometheus via scrape de :9121/metrics.
+      test: ["NONE"]
+
+    deploy:
+      resources:
+        limits:
+          memory: ${REDIS_EXPORTER_MEMORY_LIMIT:-64M}
+
+    cap_drop:
+      - ALL
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=16M
+
+  # ---------------------------------------------------------------------------
+  # Grafana — dashboards e visualização de métricas e logs
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: frontend de visualização independente das fontes
+  # de dados. Datasources Prometheus + Loki auto-provisionados.
+  # Acessível via Caddy (GRAFANA_DOMAIN) — está na frontend_net para que o
+  # Caddy consiga resolver grafana:3000 via DNS interno Docker.
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-grafana
+    hostname: grafana
+    <<: *security-defaults
+    logging: *default-logging
+
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD}"
+      GF_SECURITY_SECRET_KEY: "${GRAFANA_SECRET_KEY}"
+      GF_SERVER_DOMAIN: "${GRAFANA_DOMAIN}"
+      GF_SERVER_ROOT_URL: "https://${GRAFANA_DOMAIN}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_LOG_MODE: "console"
+      GF_LOG_LEVEL: "warn"
+      TZ: "${TZ}"
+
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./services/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./services/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+
+    networks:
+      - monitoring_net
+      - frontend_net   # Caddy alcança grafana:3000 por aqui
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+    deploy:
+      resources:
+        limits:
+          memory: ${GRAFANA_MEMORY_LIMIT:-512M}
+
+    cap_drop:
+      - ALL
+
+  # ---------------------------------------------------------------------------
+  # Loki — agregador de logs (backend do Grafana para consultas LogQL)
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: armazenamento e indexação de logs tem ciclo de
+  # vida próprio (retenção, compactação). Recebe push do Promtail.
+  # Storage: filesystem local (volume nomeado), retenção 31 dias.
+  # ---------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-loki
+    hostname: loki
+    <<: *security-defaults
+    logging: *default-logging
+
+    command: -config.file=/etc/loki/loki.yml
+
+    volumes:
+      - loki_data:/loki
+      - ./services/loki/config/loki.yml:/etc/loki/loki.yml:ro
+
+    networks:
+      - monitoring_net
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3100/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+    deploy:
+      resources:
+        limits:
+          memory: ${LOKI_MEMORY_LIMIT:-512M}
+
+    cap_drop:
+      - ALL
+
+  # ---------------------------------------------------------------------------
+  # Promtail — agente de coleta de logs dos containers Docker
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: coleta de logs é função de borda independente.
+  # Descobre containers via Docker socket (read-only) e enriquece logs com
+  # labels (container name, image, stream stdout/stderr).
+  # NOTA DE SEGURANÇA: Docker socket acesso = acesso root via API.
+  # Mitigação: cap_drop:ALL + no-new-privileges + socket montado :ro.
+  # ---------------------------------------------------------------------------
+  promtail:
+    image: grafana/promtail:3.3.2
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-promtail
+    hostname: promtail
+    <<: *security-defaults
+    logging: *default-logging
+
+    command: -config.file=/etc/promtail/promtail.yml
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - promtail_positions:/tmp
+      - ./services/promtail/config/promtail.yml:/etc/promtail/promtail.yml:ro
+
+    networks:
+      - monitoring_net
+
+    healthcheck:
+      # promtail:3.3.2 não tem wget/curl — usa bash /dev/tcp para testar o HTTP listener
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/9080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    deploy:
+      resources:
+        limits:
+          memory: ${PROMTAIL_MEMORY_LIMIT:-128M}
+
+    cap_drop:
+      - ALL
+
+  # ---------------------------------------------------------------------------
+  # Alertmanager — roteamento e deduplicação de alertas
+  # ---------------------------------------------------------------------------
+  # Por que container dedicado: alerting tem estado próprio (silences, grupos
+  # ativos). Recebe alertas do Prometheus, deduplica e encaminha.
+  # Estado atual: receiver blackhole (stub). Configure em:
+  #   services/alertmanager/config/alertmanager.yml
+  # ---------------------------------------------------------------------------
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: ${COMPOSE_PROJECT_NAME:-glpi-dev}-alertmanager
+    hostname: alertmanager
+    <<: *security-defaults
+    logging: *default-logging
+
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+
+    volumes:
+      - alertmanager_data:/alertmanager
+      - ./services/alertmanager/config/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+
+    networks:
+      - monitoring_net
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    deploy:
+      resources:
+        limits:
+          memory: ${ALERTMANAGER_MEMORY_LIMIT:-128M}
+
+    cap_drop:
+      - ALL
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=16M
+
+# ==============================================================================
+# REDES
+# ==============================================================================
+# frontend_net  : serviços de borda (caddy, glpi-app, grafana)
+# backend_net   : serviços de dados (mariadb, redis, glpi-app, glpi-cron,
+#                 backup, mysqld-exporter, redis-exporter)
+# monitoring_net: serviços de monitoramento (todos os 8 da Fase 2)
+#
+# Defesa em profundidade: Caddy comprometido não chega diretamente ao MariaDB.
+# ==============================================================================
+networks:
+  frontend_net:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-dev}_frontend
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: glpi-front
+
+  backend_net:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-dev}_backend
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: glpi-back
+    internal: false   # permite resolver DNS externo (updates de plugins)
+
+  monitoring_net:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-dev}_monitoring
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: glpi-mon
+
+# ==============================================================================
+# VOLUMES NOMEADOS
+# ==============================================================================
+volumes:
+  # Fase 1 — GLPI
+  mariadb_data:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-dev}_mariadb_data
+  redis_data:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-dev}_redis_data
+  glpi_data:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-dev}_glpi_data
+  caddy_data:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-dev}_caddy_data
+  caddy_config:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-dev}_caddy_config
+
+  # Fase 2 — Observabilidade
+  prometheus_data:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-dev}_prometheus_data
+  grafana_data:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-dev}_grafana_data
+  loki_data:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-dev}_loki_data
+  alertmanager_data:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-dev}_alertmanager_data
+  promtail_positions:
+    name: ${COMPOSE_PROJECT_NAME:-glpi-dev}_promtail_positions

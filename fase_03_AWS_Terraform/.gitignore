@@ -1,0 +1,69 @@
+# =============================================================================
+# .gitignore - Fase 3 AWS Terraform
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Terraform - estado, cache e secrets
+# ---------------------------------------------------------------------------
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfstate.backup
+**/.terraform.lock.hcl
+
+# Variaveis com secrets (nunca versionar)
+terraform.tfvars
+*.auto.tfvars
+!*.tfvars.example
+
+# Planos salvos localmente
+*.tfplan
+*.tfplan.json
+
+# Override files (personalizacao local)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Credenciais Terraform CLI
+.terraformrc
+terraform.d/
+
+# ---------------------------------------------------------------------------
+# Stack Docker (stack/) - mesmas regras do .gitignore da Fase 2
+# ---------------------------------------------------------------------------
+
+# Secrets e configuracao local
+stack/.env
+stack/.env.*
+!stack/.env.example
+
+# Backups locais (sincronizados ao S3)
+stack/backups/
+
+# Certificados TLS gerenciados pelo Caddy (regeneraveis)
+stack/services/caddy/data/
+
+# Credenciais do mysqld-exporter (geradas pelo setup-monitoring-user.sh)
+stack/services/mysqld-exporter/config/.my.cnf
+
+# ---------------------------------------------------------------------------
+# Geral
+# ---------------------------------------------------------------------------
+*.log
+*.pem
+*.key
+*.crt
+*.p12
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Claude Code (paths locais, tokens de sessao)
+.claude/
+CLAUDE.md
+.mcp.json

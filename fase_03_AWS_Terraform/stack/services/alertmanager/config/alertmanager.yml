@@ -1,0 +1,61 @@
+# ==============================================================================
+#  Alertmanager — Configuração de Roteamento de Alertas
+# ==============================================================================
+#  Estado atual: STUB — todos os alertas vão para o receiver 'blackhole' (nulo).
+#  Configure o receiver de sua escolha descomentando a seção correspondente
+#  e atualizando as credenciais no .env.
+#
+#  Receivers disponíveis:
+#    - email_configs    → SMTP (Gmail, SendGrid, Mailgun, etc.)
+#    - slack_configs    → Slack Incoming Webhook
+#    - pagerduty_configs → PagerDuty
+#    - webhook_configs  → Webhook HTTP genérico
+# ==============================================================================
+
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: [alertname, job, severity]
+  group_wait: 30s         # aguarda 30s para agrupar alertas similares
+  group_interval: 5m      # reenvia grupo a cada 5min enquanto ativo
+  repeat_interval: 12h    # renotifica alertas ativos a cada 12h
+  receiver: blackhole     # TROCAR pelo receiver real quando configurado
+
+receivers:
+  - name: blackhole
+    # Receiver vazio — descarta todos os alertas (stub inicial)
+
+  # ---------------------------------------------------------------------------
+  # Exemplo: E-mail via SMTP
+  # ---------------------------------------------------------------------------
+  # - name: email
+  #   email_configs:
+  #     - to: "ops@exemplo.com.br"
+  #       from: "alertmanager@exemplo.com.br"
+  #       smarthost: "smtp.gmail.com:587"
+  #       auth_username: "seu-email@gmail.com"
+  #       auth_password: "app-password-aqui"
+  #       require_tls: true
+  #       send_resolved: true
+  #       headers:
+  #         Subject: "[GLPI] {{ .Status | toUpper }}: {{ .GroupLabels.alertname }}"
+
+  # ---------------------------------------------------------------------------
+  # Exemplo: Slack
+  # ---------------------------------------------------------------------------
+  # - name: slack
+  #   slack_configs:
+  #     - api_url: "https://hooks.slack.com/services/XXXXX/YYYYY/ZZZZZ"
+  #       channel: "#alertas-glpi"
+  #       title: '{{ .Status | toUpper }}: {{ .GroupLabels.alertname }}'
+  #       text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+  #       send_resolved: true
+
+inhibit_rules:
+  # Suprime alertas 'warning' quando há 'critical' para o mesmo serviço
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = warning
+    equal: [alertname, job]
