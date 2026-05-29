@@ -102,34 +102,15 @@ module "compute" {
 }
 
 # -----------------------------------------------------------------------------
-# Modulo 5: DNS (Route 53)
+# Modulo 5: DNS (Route 53) - DESABILITADO
+# DNS gerenciado pelo Cloudflare. Apos o apply, criar manualmente no Cloudflare:
+#   A  glpi.grupolimajr.com.br         -> EC2 public IP (output ec2_public_ip)
+#   A  grafana.glpi.grupolimajr.com.br -> EC2 public IP (output ec2_public_ip)
+# TLS e gerenciado pelo Caddy via Let's Encrypt (HTTP-01 challenge).
 # -----------------------------------------------------------------------------
-module "dns" {
-  source = "./modules/dns"
-
-  name_prefix       = local.name_prefix
-  domain            = var.domain
-  create_zone       = var.create_dns_zone
-  glpi_subdomain    = var.glpi_subdomain
-  grafana_subdomain = var.grafana_subdomain
-  ec2_public_ip     = module.compute.public_ip
-  dns_ttl           = 300
-  common_tags       = local.common_tags
-}
 
 # -----------------------------------------------------------------------------
-# Modulo 6: ACM (Certificado TLS)
-# Nota: Provisiona e valida o cert, mas nao e usado pela EC2 diretamente.
-# Pronto para ALB em fase futura. Ver comentario em modules/acm/main.tf.
+# Modulo 6: ACM (Certificado TLS) - DESABILITADO
+# Ja existe certificado wildcard *.grupolimajr.com.br ISSUED na conta.
+# Reativar ao adicionar ALB em fase futura (importar o cert existente).
 # -----------------------------------------------------------------------------
-module "acm" {
-  source = "./modules/acm"
-
-  name_prefix = local.name_prefix
-  domain      = var.domain
-  zone_id     = module.dns.zone_id
-  common_tags = local.common_tags
-
-  # Depende do modulo dns: a zona precisa existir antes de criar records de validacao
-  depends_on = [module.dns]
-}

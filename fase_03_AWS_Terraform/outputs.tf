@@ -3,7 +3,7 @@
 # =============================================================================
 
 output "ec2_public_ip" {
-  description = "Elastic IP publico da EC2. Configure seus A records DNS para este IP."
+  description = "Elastic IP publico da EC2. Configure os A records no Cloudflare para este IP."
   value       = module.compute.public_ip
 }
 
@@ -14,7 +14,7 @@ output "ec2_instance_id" {
 
 output "ssh_command" {
   description = "Comando SSH para conectar na instancia."
-  value       = module.compute.ssh_command
+  value       = "ssh -i ~/.ssh/id_ed25519 admin@${module.compute.public_ip}"
 }
 
 output "ami_used" {
@@ -23,13 +23,13 @@ output "ami_used" {
 }
 
 output "glpi_url" {
-  description = "URL do GLPI (disponivel apos propagacao DNS e bootstrap da EC2)."
-  value       = "https://${module.dns.glpi_fqdn}"
+  description = "URL do GLPI (disponivel apos A record no Cloudflare e bootstrap da EC2)."
+  value       = "https://${var.glpi_subdomain}.${var.domain}"
 }
 
 output "grafana_url" {
-  description = "URL do Grafana (disponivel apos propagacao DNS e bootstrap da EC2)."
-  value       = "https://${module.dns.grafana_fqdn}"
+  description = "URL do Grafana (disponivel apos A record no Cloudflare e bootstrap da EC2)."
+  value       = "https://${var.grafana_subdomain}.${var.domain}"
 }
 
 output "s3_backup_bucket" {
@@ -37,27 +37,21 @@ output "s3_backup_bucket" {
   value       = module.storage.bucket_name
 }
 
-output "route53_nameservers" {
-  description = <<-EOT
-    ACAO NECESSARIA: Configure estes nameservers no painel do registrador do seu dominio.
-    Sem isso, o Route 53 nao resolve o dominio e o Let's Encrypt nao consegue emitir o cert.
+output "cloudflare_dns_records" {
+  description = "ACAO NECESSARIA: Criar estes A records no Cloudflare apos o apply."
+  value       = <<-EOT
+    Tipo  Nome                              Conteudo          Proxy
+    A     glpi.grupolimajr.com.br           ${module.compute.public_ip}   DNS only (nuvem cinza)
+    A     grafana.glpi.grupolimajr.com.br   ${module.compute.public_ip}   DNS only (nuvem cinza)
+
+    IMPORTANTE: usar "DNS only" (nuvem cinza, nao laranja) para que o
+    Caddy consiga emitir o certificado Let's Encrypt via HTTP-01 challenge.
   EOT
-  value = module.dns.nameservers
-}
-
-output "acm_certificate_arn" {
-  description = "ARN do certificado ACM (usar ao adicionar ALB em fase futura)."
-  value       = module.acm.certificate_arn
-}
-
-output "vpc_id" {
-  description = "ID da VPC criada."
-  value       = module.vpc.vpc_id
 }
 
 output "bootstrap_log" {
   description = "Comando para acompanhar o bootstrap na EC2 apos criacao."
-  value       = "ssh -i ~/.ssh/id_rsa admin@${module.compute.public_ip} 'tail -f /var/log/glpi-bootstrap.log'"
+  value       = "ssh -i ~/.ssh/id_ed25519 admin@${module.compute.public_ip} 'tail -f /var/log/glpi-bootstrap.log'"
 }
 
 output "teardown_reminder" {
