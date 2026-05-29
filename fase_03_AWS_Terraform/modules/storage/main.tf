@@ -64,6 +64,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "backups" {
     id     = "backup-tiering"
     status = "Enabled"
 
+    filter {}
+
     transition {
       days          = var.transition_to_ia_days
       storage_class = "STANDARD_IA"
@@ -86,6 +88,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "backups" {
   rule {
     id     = "expire-old-versions"
     status = "Enabled"
+
+    filter {}
 
     noncurrent_version_expiration {
       noncurrent_days = 90

@@ -134,7 +134,7 @@ log "Diretorio de trabalho: $(pwd)"
 
 # -----------------------------------------------------------------------------
 # 5. Gerar arquivo .env
-# Variaveis entre ${} sao substituidas pelo Terraform templatefile antes
+# Variaveis entre $${} sao substituidas pelo Terraform templatefile antes
 # de o script ser enviado para a EC2. O heredoc usa aspas simples (EOF_ENV)
 # para evitar expansao adicional pelo bash.
 # -----------------------------------------------------------------------------
