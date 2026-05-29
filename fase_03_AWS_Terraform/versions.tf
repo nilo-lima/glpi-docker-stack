@@ -14,15 +14,13 @@ terraform {
     }
   }
 
-  # Backend S3 - configurado apos rodar bootstrap/
-  # Para usar backend local durante desenvolvimento inicial, comente este bloco.
-  # Apos rodar o bootstrap, descomente e substitua os valores pelos outputs do bootstrap.
-  #
-  # backend "s3" {
-  #   bucket         = "glpi-fase3-tfstate-<ACCOUNT_ID>"
-  #   key            = "fase03/terraform.tfstate"
-  #   region         = "us-east-1"
-  #   dynamodb_table = "glpi-fase3-terraform-locks"
-  #   encrypt        = true
-  # }
+  # Backend S3 - state remoto com locking via DynamoDB
+  # Criado pelo bootstrap/ em 2026-05-28
+  backend "s3" {
+    bucket         = "glpi-fase3-tfstate-507687687616"
+    key            = "fase03/terraform.tfstate"
+    region         = "us-east-1"
+    use_lockfile   = true
+    encrypt        = true
+  }
 }
